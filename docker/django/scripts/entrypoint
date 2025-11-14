@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -e  # Exit immediately if any command fails
+
+# ---------------------------------------------------------------------------
+# Configure the PostgreSQL connection string (used by Django or other services)
+# ---------------------------------------------------------------------------
+export DATABASE_URL="postgres://${DB_USER:?}:${DB_PASSWORD:?}@${DB_HOST:?}:${DB_PORT:?}/${DB_NAME:?}"
+
+# ---------------------------------------------------------------------------
+# Replace the shell with the target command (e.g., `yarsin runserver`)
+# This ensures proper signal handling inside Docker containers.
+# ---------------------------------------------------------------------------
+exec "$@"

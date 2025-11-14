@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+# This script initializes a new project by creating project settings files.
+# It takes an optional project name as an argument, and if not provided, it uses the default project name defined in the environment variable PROJECT_NAME.
+# The script sets options to exit immediately if a command fails, to exit when a command in a pipeline fails, and to exit if it tries to use unset variables.
+
+copy_env_files() {
+    local directory="$1"
+    local new_file=""
+
+    for file in $directory/example.env.*; do
+        if [ -e "$file" ]; then
+            dir=$(dirname "$file")
+            file_name=$(basename "$file")
+            new_file_name=${file_name//example/}
+            new_file="${dir}/${new_file_name}"
+
+            if [ -e "$new_file" ]; then
+                message_warning "WARNING: target exists, skipping: $new_file"
+                continue
+            fi
+
+            cp "$file" "$new_file"
+            message_success "Copied $file to $new_file"
+        fi
+    done
+}
+
+create_directories() {
+    local directories="$@"
+
+    for directory in $directories; do
+        
+        if [ -d "$directory" ]; then
+            message_warning "WARNING: Directory exists, skipping: $directory"
+            continue
+        fi
+
+        mkdir -p "$directory"
+        if [ $? -eq 0 ]; then
+            message_success "Directory created: $directory"
+        else
+            message_error "ERROR: Failed to create directory: $directory"
+        fi
+    done
+}
+
+
+init() {
+    copy_env_files "${workdir}/envs"
+
+    # Start a new project using 'yarsin' with the specified project name
+    docker compose -f ./compose.yml run --rm --no-deps api sh -c "DJANGO_SETTINGS_MODULE=""; run_as $(id -u) yarsin init"
+
+    create_directories apps backups media static templates
+}
+
+init "$@"

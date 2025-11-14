@@ -1,0 +1,10 @@
+## Building Powerful Web Applications with Django and Environment Variable Management
+Django==5.2.8                           # Core Python web framework used to build scalable, secure, and maintainable applications.
+django-environ==0.12.0                  # Environment variable management for secure and flexible configuration handling.
+
+daphne==4.2.1                           # ASGI server that enables Django Channels to support asynchronous requests and WebSockets.
+channels==4.3.1                         # Framework for handling WebSockets and asynchronous features in Django.
+
+# Pillow==12.0.0                          # Python Imaging Library for image processing capabilities, required for Django ImageField operations.
+# django-imagekit==6.0.0                  # Advanced image processing for Django with on-the-fly generation
+# django-cleanup==9.0.0                   # Automatically delete old image files when models are deleted

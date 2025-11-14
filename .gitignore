@@ -1,0 +1,105 @@
+# .gitignore for a Django project
+# Purpose: sensible defaults for local development with Python, Django and VSCode.
+# Keep important project files under version control (e.g. migrations), but exclude
+# transient, build or machine-specific files (virtualenvs, caches, secrets, etc.).
+
+# === Python bytecode and caches ===
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cache and settings for popular tools
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# === Virtual environments ===
+# Don't commit virtual environments — developers should create their own.
+venv/
+ENV/
+env/
+.venv/
+
+# If you use pipenv or poetry lockfiles, you may want to keep those files tracked.
+# Pipenv lockfile: Pipfile.lock (tracked) — not ignored by default.
+
+# === Environment / secret files ===
+# Store secrets (API keys, DB passwords, etc.) in env files or a secrets manager —
+# do NOT commit these to git.
+.env
+.env.*
+!/.env
+local_settings.py
+
+# === Django specific ===
+# SQLite (local dev database)
+db.sqlite3
+db.sqlite3-journal
+
+# Media uploads (user-generated files) — usually kept out of repo
+media/
+
+# Collected static files (created by `collectstatic`) — do not commit
+staticfiles/
+# If your project uses a different STATIC_ROOT name, add it here
+# static/
+
+# Keep migrations themselves in version control so schema changes are tracked.
+# We only ignore compiled caches inside migrations.
+*/migrations/__pycache__/
+
+# Django logs
+*.log
+logs/
+
+# === Editor / IDE files ===
+# VSCode workspace settings and local state — usually machine-specific.
+.vscode/
+# If you want to share recommended settings, instead commit a specific file like
+# .vscode/settings.shared.json and add a small README explaining how to adopt them.
+
+# JetBrains IDEs
+.idea/
+
+# macOS and Windows extras
+.DS_Store
+Thumbs.db
+
+# === Build / distribution ===
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# === Node / frontend (if you have a frontend in the repo) ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# === Logs and runtime files ===
+*.pid
+*.seed
+*.pid.lock
+
+# === Celery ===
+celerybeat-schedule
+celerybeat.pid
+
+# === Documentation build artifacts ===
+docs/_build/
+
+# === Optional: IDE or tooling exceptions ===
+# If you want to keep some VSCode files under version control (for example a
+# shared launch configuration or formatting rules), you can ignore everything
+# in .vscode but then "un-ignore" specific files by adding lines like:
+# !.vscode/settings.json
+# !.vscode/launch.json
+
+# === Helpful notes ===
+# 1) Keep migrations tracked. They should not be ignored because they record
+#    database schema history; ignoring them causes team sync problems.
+# 2) Avoid committing any file that contains secrets (credentials, keys, tokens).
+# 3) If you deploy through CI/CD, make sure CI builds re-create virtualenvs and
+#    do not depend on files excluded here.
+# 4) Review this file for your project's specifics (custom static/media root,
+#    different virtualenv path, extra tools) and adjust accordingly.

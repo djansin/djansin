@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+if [[ $# -eq 0 ]]; then
+
+    if [ "$(check_service_status api)" = 0 ]; then
+        docker compose -f ./compose.yml exec api sh -c "run_as $(id -u) pytest"
+    else
+        docker compose -f ./compose.yml run --rm --no-deps api sh -c "run_as $(id -u) pytest"
+    fi
+
+    exit 0
+fi
+
+docker compose -f ./compose.yml start "$@"

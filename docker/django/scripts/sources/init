@@ -1,0 +1,60 @@
+#!/usr/bin/env sh
+
+set -o errexit  # Exit script immediately if a command fails
+set -o pipefail # Exit script when a command in a pipeline fails
+
+create_django_settings() {
+    local environment="$1"
+    local filepath="${WORK_DIRECTORY}/${PROJECT_NAME}/settings/${environment}.py"
+
+    # Ensure directory exists
+    if [[ ! -d "$workdir" ]]; then
+        mkdir -p "$workdir" || {
+            message_error "Cannot create directory: $workdir"
+            return 1
+        }
+    fi
+
+    # Check if file already exists
+    if [[ -f "$filepath" ]]; then
+        message_warning " WARNING: target exists, skipping: $filepath"
+        return 0
+    fi
+
+    # Write the settings file
+    cat > "$filepath" << EOF
+"""
+Django settings for the '${environment}' environment.
+
+This settings file provides configuration parameters specifically tailored
+for the '${environment}' mode of the project. It is intended to be used
+only during ${environment} operations (such as development, testing, or other
+dedicated environments).
+
+It imports all base settings and may override or extend them as required
+to adapt the project’s behavior for this environment.
+"""
+
+from .base import *  # pylint: disable=unused-wildcard-import, wildcard-import  # noqa
+EOF
+
+    message_suggestion "Django settings file created: ./${PROJECT_NAME}/settings/${environment}.py"
+}
+
+
+init() {
+    local project_name="${1:-$PROJECT_NAME}"
+    local workdir="${2:-$WORK_DIRECTORY}"
+
+    django-admin startproject "${project_name}" "${workdir}"
+
+    # Create necessary directories and files for project settings
+    mkdir -p "${workdir}/${project_name}/settings" &&
+        touch "${workdir}/${project_name}/settings/__init__.py" &&
+        mv ${project_name}/settings.py ${workdir}/${project_name}/settings/base.py
+    
+    create_django_settings development
+    create_django_settings production
+}
+ 
+ init "$@"

@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+
+# This script creates a Django project using the 'django-admin startproject' command.
+
+set -o errexit  # Exit script immediately if a command fails
+set -o pipefail # Exit script when a command in a pipeline fails
+
+startproject() {
+    local project_name="${1:-$PROJECT_NAME}"
+
+    django-admin startproject "${project_name}" "${WORK_DIRECTORY}"
+}
+
+startproject "$@"

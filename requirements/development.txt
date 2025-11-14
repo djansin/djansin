@@ -1,0 +1,14 @@
+-r base.txt
+
+## Database Connectivity
+psycopg2-binary==2.9.11                 # PostgreSQL adapter for Python that provides efficient database communication.
+
+## Code Quality and Formatting Tools
+isort==5.13.2                           # Tool that automatically organizes and orders Python imports.
+flake8==7.0.0                           # Linting tool for enforcing Python code style and detecting common issues.
+Flake8-pyproject==1.2.3                 # Flake8 extension that allows configuration through pyproject.toml.
+black==24.3.0                           # Opinionated code formatter for maintaining consistent code style across the project.
+
+colorlog==6.10.1                        # Enhances logging output with colors to improve readability during development.
+
+pytest-django==4.11.1                   # Pytest plugin that provides Django integration for simplified and powerful testing workflows.
