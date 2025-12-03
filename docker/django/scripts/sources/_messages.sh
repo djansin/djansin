@@ -171,38 +171,39 @@ message_ask() {
 spinner() {
     # Accepts a message as input
     local info="$1"           # Store the informational message in a local variable
-    
+
     # Get the process ID of the background process
     local pid=$!              # $! contains PID of most recent background command
-    
+
     # Set the delay for the spinner animation
     local delay=0.5           # Time in seconds between spinner frame updates
-    
+
     # Define the spinner characters
     local spinstr='|/-\'      # Four-character sequence for spinner animation
-    
+
     # Loop until the background process is running
     while kill -0 $pid 2>/dev/null; do
         # Rotate the spinner characters
-        local temp=${spinstr#?}           # Extract all but first character
+        local temp=${spinstr#?}                # Extract all but first character
         printf " [%c]  %s" "$spinstr" "$info"  # Display current spinner frame with message
-        
-        # Update spinstr by moving first character to the end
-        local spinstr=$temp${spinstr%"$temp"}  # Rotate spinner sequence
-        
+
+        # Calculate the length of the message
+        local msg_length=$(printf "%s" "$info" | wc -c)
+
         # Add backspace characters to reset the cursor position
         sleep $delay                       # Pause before next animation frame
         local reset="\b\b\b\b\b\b"         # Backspaces for "[X]  " part (6 chars)
-        
-        # Calculate additional backspaces for the info message length
-        for ((i = 1; i <= $(echo $info | wc -c); i++)); do
-            reset+="\b"                    # Add one backspace per character in info
+
+        i=1
+        while [ $i -le $msg_length ]; do
+            reset+="\b"
+            i=$((i + 1))
         done
-        
+
         # Reset the cursor position for the next spinner update
         printf $reset                      # Move cursor back to start position
     done
-    
+
     # Clear the spinner and message once the process is complete
     printf "    \b\b\b\b"                  # Overwrite spinner with spaces and backspace
 }

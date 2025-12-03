@@ -1,35 +1,85 @@
 #!/usr/bin/env sh
 
+# -----------------------------------------------------------------------------
+# Script: yarsin
+# Description: Dispatcher script that routes commands to appropriate handlers
+#              Supports both custom source functions and Django management commands
+# Usage: ./yarsin <function_name|django_command> [args...]
+# Examples:
+#   ./yarsin database_init            # Custom function
+#   ./yarsin migrate                  # Django command
+#   ./yarsin startproject myproject   # Django admin command
+# Environment Variables:
+#   WORK_DIRECTORY - Optional, directory containing manage.py (defaults to current)
+# Dependencies:
+#   - Sourced files: _constants.sh, _messages.sh, _utils.sh
+#   - Django project structure for Django commands
+#   - Custom source files in sources/ directory for function commands
+# -----------------------------------------------------------------------------
+
 # Define the project and workdir directory
-workdir="$(cd "$(dirname "$0")" && pwd)" # Get the directory of the script
-project_dir=$(realpath "$workdir")       # Get the project directory by going up zero level
+workdir="$(cd "$(dirname "$0")" && pwd)"  # Get script's directory by changing to it then printing path
+project_dir=$(realpath "$workdir")         # Get canonical absolute path (resolves symlinks)
 
-# Source the necessary files
-source "${workdir}/sources/_constants.sh" # Constants file
-source "${workdir}/sources/_messages.sh"  # Messages file
-source "${workdir}/sources/_utils.sh"     # Utilities file
+# Source necessary library files for shared functionality
+source "${workdir}/sources/_constants.sh"  # Contains constant values and configuration
+source "${workdir}/sources/_messages.sh"   # Contains formatted output functions
+source "${workdir}/sources/_utils.sh"      # Contains utility helper functions
 
-# Check for the function name argument
+# -----------------------------------------------------------------------------
+# Main execution: Command routing logic
+# -----------------------------------------------------------------------------
+
+# Check for the function name argument - ensure at least one argument provided
 if [[ $# -eq 0 ]]; then
-    message_error "Usage: $0 <function_name> [arguments]" # Display usage error message
-    exit 1
+    # No arguments provided - display usage error
+    message_error "Usage: $0 <function_name> [arguments]"  # Display usage error message
+    exit 1  # Exit with error code
 fi
 
-# Call the specified function with the provided arguments
+# Construct the path to the potential source file for the requested function
+# Pattern: sources/<function_name> (no file extension)
 source_path="${workdir}/sources/${1}"
 
+# Check if a custom source file exists for the requested function
 if [ -f "${source_path}" ]; then
+    # Custom source file exists - treat as function call
+
+    # Remove the function name from arguments list
     shift
+
+    # Source the file (executes its content) with remaining arguments
+    # This allows function files to access their own $1, $2, etc.
     source "${source_path}" "$@"
+
 else
+    # No custom source file found - try as Django command
+
+    # Check if manage.py exists in WORK_DIRECTORY (or current directory)
     if [ -f "${WORK_DIRECTORY}/manage.py" ]; then
+        # Django project detected - execute command via django-admin
+
+        # Execute the django-admin command with all arguments
+        # $@ expands to all original arguments including the command name
         django-admin "$@"
+
+        # Check if django-admin command failed
         if [ ! $? -eq 0 ]; then
+            # Command failed - provide helpful error message with version-specific docs
+
+            # Get Django version for documentation link (assuming get_django_version is defined)
             ver="$(get_django_version)"
+
+            # Display error with link to appropriate Django documentation
             message_error "An error occurred. For guidance, please refer to the django-admin documentation: https://docs.djangoproject.com/en/${ver}/ref/django-admin/"
-            exit 1
+
+            exit 1  # Exit with error code
         fi
+        # If django-admin succeeded, script exits with its exit code (implicit)
+
     else
+        # No manage.py found and no custom function - cannot proceed
         message_error "'manage.py' was not found. To create a new project, use the 'yarsin startproject' command."
+        exit 1  # Exit with error code
     fi
 fi

@@ -1,0 +1,58 @@
+#!/usr/bin/env sh
+
+# -----------------------------------------------------------------------------
+# Script: start_worker
+# Description: Starts a Celery worker with automatic reload on code changes
+#              Uses watchmedo to monitor Python files and restart worker when changes occur
+# Usage: ./start_worker
+# Dependencies: 
+#   - watchmedo (from watchdog package)
+#   - celery
+#   - Sourced files: _constants.sh, _messages.sh, _utils.sh
+# Environment: Typically used in development for hot-reloading
+# Note: Not recommended for production use due to performance overhead
+# -----------------------------------------------------------------------------
+
+# Enable strict error handling for more robust scripts
+set -o errexit  # Exit script immediately if any command exits with non-zero status
+set -o nounset  # Exit script if any variable is referenced before being set
+
+# Define the project and workdir directory
+workdir="$(cd "$(dirname "$0")" && pwd)"  # Get script's directory by changing to it then printing path
+project_dir=$(realpath "$workdir")         # Get canonical absolute path (resolves symlinks)
+
+# Source necessary library files for shared functionality
+source "${workdir}/sources/_constants.sh"  # Contains constant values and configuration
+source "${workdir}/sources/_messages.sh"   # Contains formatted output functions
+source "${workdir}/sources/_utils.sh"      # Contains utility helper functions
+
+# -----------------------------------------------------------------------------
+# Main execution: Start Celery worker with file watching auto-restart
+# -----------------------------------------------------------------------------
+
+# Use watchmedo to monitor changes in Python files and restart celery worker
+# watchmedo is part of the watchdog Python package for file system monitoring
+# 
+# Command breakdown:
+# watchmedo auto-restart     # Main watchmedo command for auto-restart functionality
+# -d config/                 # Directory to watch for changes (relative to current directory)
+# -p '*.py'                  # Pattern to match files to monitor (all Python files)
+# --                         # Separator: arguments after this go to the command to run
+# celery -A config worker --loglevel=info  # Command to run and restart on changes
+#
+# The command flow:
+# 1. watchmedo starts monitoring the config/ directory for *.py file changes
+# 2. Initially executes: celery -A config worker --loglevel=info
+# 3. When any *.py file in config/ changes: 
+#    a. Kills the running celery worker process
+#    b. Restarts: celery -A config worker --loglevel=info
+#
+# Notes:
+# - Only monitors direct changes in config/ directory (not subdirectories unless specified)
+# - Uses polling by default (can be CPU intensive with many files)
+# - Restarts are immediate on file save (no debouncing)
+# - Consider adding -R flag for recursive directory watching if needed
+watchmedo auto-restart \
+    -d config/ \
+    -p '*.py' \
+    -- celery -A config worker --loglevel=info

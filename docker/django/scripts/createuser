@@ -1,67 +1,101 @@
 #!/usr/bin/env sh
 
-# This script is used to create a new user with a specified UID.
-# It provides the option to specify the username and UID as arguments.
-# If the username is not provided, a default username "${USERNAME}" is used.
-# The script checks if the user already exists and exits if the UID conflicts.
-# If the user does not exist, it creates a new user with the specified UID.
+# -----------------------------------------------------------------------------
+# Script: createuser
+# Description: Creates a system user with specified UID/GID or uses defaults
+# Usage: ./createuser -u <UID> [-g <GID>] [-n <username>]
+# Options:
+#   -u  User ID (UID) - required
+#   -g  Group ID (GID) - optional, defaults to UID if not provided
+#   -n  Username - optional, defaults to value from _constants.sh
+# Returns: Creates user account or exits with error if user exists with different UID
+# Dependencies: Requires sourced files: _constants.sh, _messages.sh, _utils.sh
+# -----------------------------------------------------------------------------
 
-# Define the project and workdir directory
-workdir="$(cd "$(dirname "$0")" && pwd)" # Get the directory of the script
-project_dir=$(realpath "$workdir")       # Get the project directory by going up zero level
+# Get the directory where the script is located
+workdir="$(cd "$(dirname "$0")" && pwd)"  # Navigate to script's directory and get absolute path
 
-# Source the necessary files
-source "${workdir}/sources/_constants.sh" # Constants file
-source "${workdir}/sources/_messages.sh"  # Messages file
-source "${workdir}/sources/_utils.sh"     # Utilities file
+# Get the project directory (same as workdir in this case, but allows for future flexibility)
+project_dir=$(realpath "$workdir")         # Resolve any symlinks to get canonical path
 
+# Source necessary library files for shared functionality
+source "${workdir}/sources/_constants.sh"  # Contains constant values like default USERNAME
+source "${workdir}/sources/_messages.sh"   # Contains message functions (message_error, etc.)
+source "${workdir}/sources/_utils.sh"      # Contains utility helper functions
+
+# -----------------------------------------------------------------------------
+# Function: createuser
+# Description: Main function to create a system user with specified parameters
+#              Validates input, checks for existing users, and creates account if needed
+# -----------------------------------------------------------------------------
 createuser() {
-    local username=""
-    local uid=""
-    local gid=""
+    # Initialize local variables with empty values
+    local username=""   # Username for the new account
+    local uid=""        # User ID (numeric)
+    local gid=""        # Group ID (numeric)
 
-    # Process named arguments
+    # Process command-line options using getopts
+    # Options: -n for username, -u for UID, -g for GID
     while getopts "n:u:g:" opt; do
         case ${opt} in
-        n) username=${OPTARG} ;;
-        u) uid=${OPTARG} ;;
-        g) gid=${OPTARG} ;;
-        *)
-            message_error "Invalid option: ${opt}"
-            exit 1
-            ;;
+            n) 
+                username=${OPTARG}  # Capture username from -n argument
+                ;;
+            u) 
+                uid=${OPTARG}       # Capture UID from -u argument (required)
+                ;;
+            g) 
+                gid=${OPTARG}       # Capture GID from -g argument (optional)
+                ;;
+            *)
+                # Handle invalid options
+                message_error "Invalid option: ${opt}"
+                exit 1               # Exit with error code
+                ;;
         esac
     done
+
+    # Shift processed options away, leaving any remaining arguments
     shift $((OPTIND - 1))
 
-    # Check if required arguments are provided
+    # Validate that required UID argument was provided
     if [[ -z "$uid" ]]; then
         message_error "Usage: $0 -u <UID>"
-        exit 1
+        exit 1  # Exit with error if UID not provided
     fi
 
-    # If gid is not provided, determine the default gid
+    # If GID not provided, default to same value as UID
+    # This follows common Unix convention where user gets a personal group with same ID
     if [[ -z "$gid" ]]; then
         gid=$uid
     fi
 
-    # If username is not provided, determine the default name
+    # If username not provided, use default from constants file
+    # Assumes USERNAME is defined in sourced _constants.sh
     if [[ -z "$username" ]]; then
         username=${USERNAME}
     fi
 
-    # Check if the user already exists
-    if
-        id "$username" &
-        >/dev/null
-    then
-        if [ "$(id $username)" != "$uid" ]; then
+    # Check if user already exists in the system
+    # Redirect stderr to suppress "no such user" messages
+    if id "$username" &>/dev/null; then
+        # User exists - verify the existing UID matches requested UID
+        if [ "$(id -u $username)" != "$uid" ]; then
             message_error "User $username exists."
-            exit 1
+            exit 1  # Exit if existing user has different UID (prevents ID conflict)
         fi
+        # If UID matches, function completes silently (user already exists as requested)
     else
+        # User doesn't exist - create new user account with specified parameters
         adduser -u $uid -G $gid --disabled-password $username
+        # Options explained:
+        # -u $uid    : Set user ID
+        # -G $gid    : Add user to group with this GID (creates group if needed)
+        # --disabled-password : Create user without password (cannot login directly)
+        # $username  : Username for new account
     fi
 }
 
+# Execute the main function with all command-line arguments
+# This allows the script to be called directly: ./createuser -u 1001
 createuser "$@"

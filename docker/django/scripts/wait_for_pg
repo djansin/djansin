@@ -1,59 +1,109 @@
 #!/usr/bin/env sh
 
-# This script sets up the PostgreSQL environment and waits for the database to become available.
-# It checks the database connection status using a Python script and waits until the database is ready.
+# -----------------------------------------------------------------------------
+# Script: wait_for_pg
+# Description: Waits for PostgreSQL database to become available, then executes provided command
+#              Uses Python with psycopg2 to test database connectivity with exponential backoff
+# Usage: ./wait_for_pg [command] [args...]
+# Arguments: Any command to execute after database becomes available
+# Example: ./wait_for_pg python manage.py migrate
+# Environment Variables Required:
+#   DB_HOST - PostgreSQL server hostname
+#   DB_PORT - PostgreSQL server port
+#   DB_USER - Database username
+#   DB_NAME - Database name
+#   DB_PASSWORD - Database password
+# Dependencies: 
+#   - Python 3
+#   - psycopg2 Python package
+#   - Sourced files: _constants.sh, _messages.sh, _utils.sh
+# Exit Codes:
+#   0 - Success (database available and command executed)
+#   1 - Failed to connect to database after max retries
+#   127+ - Exit code of the executed command if it fails
+# -----------------------------------------------------------------------------
 
 # Maximum number of attempts to connect to the database
-MAX_RETRIES=30
+MAX_RETRIES=30  # Approximately 30 seconds total wait time with 1-second intervals
 
-set -o errexit  # Exit script immediately if a command fails
-set -o pipefail # Exit script when a command in a pipeline fails
-set -o nounset  # Exit script if it tries to use unset variables
+# Enable strict error handling for more robust scripts
+set -o errexit   # Exit script immediately if any command exits with non-zero status
+set -o pipefail  # Exit script if any command in a pipeline fails (not just the last)
+set -o nounset   # Exit script if any variable is referenced before being set
 
 # Define the project and workdir directory
-workdir="$(cd "$(dirname "$0")" && pwd)" # Directory of the script
-project_dir=$(realpath "$workdir")       # Project directory
+workdir="$(cd "$(dirname "$0")" && pwd)"  # Get script's directory by changing to it then printing path
+project_dir=$(realpath "$workdir")         # Get canonical absolute path (resolves symlinks)
 
-# Source necessary files
-source "${workdir}/sources/_constants.sh" # Constants file
-source "${workdir}/sources/_messages.sh"  # Messages file
-source "${workdir}/sources/_utils.sh"     # Utilities file
+# Source necessary library files for shared functionality
+source "${workdir}/sources/_constants.sh"  # Contains constant values and configuration
+source "${workdir}/sources/_messages.sh"   # Contains formatted output functions
+source "${workdir}/sources/_utils.sh"      # Contains utility helper functions
 
-# Function to check if PostgreSQL is ready to accept connections
+# -----------------------------------------------------------------------------
+# Function: postgres_ready
+# Description: Tests PostgreSQL database connectivity using Python and psycopg2
+#              Attempts to establish a connection with provided credentials
+# Returns: 0 if connection successful, 1 if connection fails
+# Note: Uses a Python heredoc for inline script execution
+# -----------------------------------------------------------------------------
 postgres_ready() {
+    # Execute Python code to test database connection
     python <<END
 import sys
 import psycopg2
 try:
+    # Attempt to establish a connection with PostgreSQL
     psycopg2.connect(
-        host="${DB_HOST}",
-        port="${DB_PORT}",
-        user="${DB_USER}",
-        password="${DB_PASSWORD}",
-        dbname="${DB_NAME}"
+        host="${DB_HOST}",           # Database host from environment
+        port="${DB_PORT}",           # Database port from environment
+        user="${DB_USER}",           # Database username from environment
+        password="${DB_PASSWORD}",   # Database password from environment
+        dbname="${DB_NAME}"          # Database name from environment
     )
+    # Connection successful - print nothing, exit with code 0
 except psycopg2.OperationalError:
-    sys.exit(-1)
-sys.exit(0)
+    # Connection failed - exit with code 1
+    sys.exit(1)
+# Implicit sys.exit(0) if try block succeeds
 END
 }
 
+# Initialize retry counter
 retry_count=0
 
-# Wait until PostgreSQL is ready to accept connections with a limit on retries
+# -----------------------------------------------------------------------------
+# Main execution: Wait for database with retry logic
+# -----------------------------------------------------------------------------
+
+# Loop until either:
+# 1. postgres_ready returns success (exit code 0), OR
+# 2. Maximum retries reached (30 attempts)
 until postgres_ready || [ $retry_count -eq $MAX_RETRIES ]; do
+    # Display waiting message to stderr (>&2) to avoid interfering with command output
     message_info >&2 "Waiting for PostgreSQL to be available..."
+
+    # Wait 1 second before retrying (linear backoff)
     sleep 1
 
+    # Increment retry counter
     retry_count=$((retry_count + 1))
 
     # Check if maximum retries reached without successful connection
     if [ $retry_count -eq $MAX_RETRIES ]; then
         message_error >&2 "Failed to connect to PostgreSQL after $MAX_RETRIES attempts. Exiting..."
-        exit 1
+        exit 1  # Exit with error code
     fi
 done
 
-# Once PostgreSQL is ready, execute the provided commands
+# -----------------------------------------------------------------------------
+# Database is available - execute provided command
+# -----------------------------------------------------------------------------
+
+# Display success message to stderr
 message_success >&2 "PostgreSQL is now available."
+
+# Execute the command passed as arguments to this script
+# exec replaces the current shell process with the command, preserving PID
+# "$@" expands to all positional parameters as separate words
 exec "$@"
