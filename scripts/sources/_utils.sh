@@ -258,3 +258,76 @@ check_service_status() {
         return 1 # Return 1 to indicate that the service is not running
     fi
 }
+
+# -----------------------------------------------------------------------------
+# Function: to_upper
+# Description:
+#   Converts the given string to uppercase.
+# Arguments:
+#   $1 : Input string
+# Output:
+#   Prints the uppercase version of the input string
+# Example:
+#   to_upper "HelloWorld"  # Output: helloworld
+# -----------------------------------------------------------------------------
+to_upper() {
+    local input="$1"
+    echo "$input" | awk '{print toupper($0)}'
+}
+
+# -----------------------------------------------------------------------------
+# Function: to_lower
+# Description:
+#   Converts the given string to lowercase.
+# Arguments:
+#   $1 : Input string
+# Output:
+#   Prints the lowercase version of the input string
+# Example:
+#   to_lower "HelloWorld"  # Output: helloworld
+# -----------------------------------------------------------------------------
+to_lower() {
+    local input="$1"
+    echo "$input" | awk '{print tolower($0)}'
+}
+
+# -----------------------------------------------------------------------------
+# Function: to_capitalize
+# Description:
+#   Capitalizes the first character of the given string, keeping the rest unchanged.
+# Arguments:
+#   $1 : Input string
+# Output:
+#   Prints the string with the first character capitalized
+# Example:
+#   to_capitalize "helloWorld"  # Output: HelloWorld
+# -----------------------------------------------------------------------------
+to_capitalize(){
+    local input="$1"
+    echo "$input" | awk '{print toupper(substr($0,1,1)) substr($0,2)}'
+}
+
+# -----------------------------------------------------------------------------
+# Function: to_snake_case
+# Description:
+#   Converts a CamelCase or kebab-case string to snake_case.
+# Arguments:
+#   $1 : Input string in CamelCase or kebab-case
+# Output:
+#   Prints the string in snake_case format
+# Example:
+#   to_snake_case "MyAppName"    # Output: my_app_name
+#   to_snake_case "my-app-name"  # Output: my_app_name
+# Implementation:
+#   - Replaces hyphens with underscores
+#   - Inserts underscores between lowercase/uppercase and uppercase/lowercase transitions
+#   - Converts all letters to lowercase
+# -----------------------------------------------------------------------------
+to_snake_case() {
+    local input="$1"
+    printf '%s' "$input" \
+        | sed -e 's/-/_/g' \
+              -e 's/\([a-z0-9]\)\([A-Z]\)/\1_\2/g' \
+              -e 's/\([A-Z]\)\([A-Z][a-z]\)/\1_\2/g' \
+        | tr '[:upper:]' '[:lower:]'
+}
