@@ -35,7 +35,7 @@ services:
     environment:
       - PROJECT_NAME=${PROJECT_NAME}      # Name of the Django project.
       - STATIC_ROOT=${STATIC_ROOT}        # Path where Django stores collected static files.
-      - MEDIA_ROOT=/assets/${MEDIA_ROOT}  # Path where Django stores media uploads.
+      - MEDIA_ROOT=${MEDIA_ROOT}          # Path where Django stores media uploads.
       - APPS_DIRECTORY=${APPS_DIRECTORY}  # Folder where Django apps are located.
       - PYTHONUSERBASE=/packages          # User-level Python package directory.
       - USERNAME=${USERNAME}              # Default username used for internal scripts.
