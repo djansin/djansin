@@ -36,15 +36,23 @@ reset_db() {
         exit 1
     fi
 
+    # Security check: prevent using 'postgres' superuser
+    if [[ "${username}" == "postgres" ]]; then
+        message_error "Restoring as 'postgres' user is not allowed for security reasons. Please set 'POSTGRES_USER' environment variable to a different user and try again."
+        exit 1
+    fi
+
     # Validate database name
     if [[ -z $database_name ]]; then
         message_error "Database name not provided."
         exit 1
     fi
 
-    # Security check: prevent using 'postgres' superuser
-    if [[ "${username}" == "postgres" ]]; then
-        message_error "Restoring as 'postgres' user is not allowed for security reasons. Please set 'POSTGRES_USER' environment variable to a different user and try again."
+    # Check if the database exists
+    if psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$database_name'" | grep -q 1; then
+        message_success "Database $database_name found. Initiating backup process..."
+    else
+        message_error "Database $database_name not found."
         exit 1
     fi
 
@@ -53,14 +61,14 @@ reset_db() {
     message_info "   Database: ${database_name}"
     message_info "   User: ${username}"
     message_info "   Host: ${PGHOST}:${PGPORT}"
-    
+
     confirm_action \
         "You are about to COMPLETELY ERASE and recreate the database '${database_name}'." \
         "DROP DATABASE ${database_name} → CREATE DATABASE ${database_name} OWNER ${username}"
 
     # Drop existing database
     message_info "Step 1 of 2: Dropping database '${database_name}'..."
-    
+
     dropdb "${database_name}" 2>/dev/null &
     spinner "Dropping database..."
 
@@ -74,7 +82,7 @@ reset_db() {
 
     # Create new database with specified owner
     message_info "Step 2 of 2: Creating database '${database_name}'..."
-    
+
     createdb --owner="${username}" "${database_name}" 2>/dev/null &
     spinner "Creating database..."
 
@@ -113,22 +121,18 @@ case $function_name in
     message_welcome "DATABASE RESET TOOL"
     message_info "This tool will guide you through resetting a PostgreSQL database."
     message_newline
-    
+
     message_ask "Available databases on ${PGHOST}:${PGPORT}:"
     list_databases "${POSTGRES_USER}" "${POSTGRES_PASSWORD}"
     message_newline
-    
+
     read -p "Enter the name of the database you wish to reset: " db_name
-    
+
     if [[ -z "$db_name" ]]; then
         message_error "No database name provided. Operation cancelled."
         exit 1
     fi
-    
-    confirm_action \
-        "You selected database '${db_name}' for reset." \
-        "Complete reset of database ${db_name}"
-    
+
     reset_db -d "${db_name}" "$@"
     ;;
 *)
