@@ -1,0 +1,371 @@
+#!/usr/bin/env bash
+
+###############################################################################
+# CREATEADMIN — DJANGO SUPERUSER MANAGEMENT UTILITY
+#
+# Purpose:
+#   A reliable, Docker-Compose–compatible utility for creating and managing
+#   Django administrator accounts. Ensures predictable automation, safe
+#   superuser creation, and consistent workflows across development environments.
+#
+# Features:
+#   • Safe, idempotent superuser creation (prevents duplicate admins)
+#   • Ability to list existing privileged users
+#   • CI/CD-friendly admin-existence check (exit code only)
+#   • Automatic secure credential generation for development environments
+#
+# Requirements:
+#   • Docker & Docker Compose
+#   • Active Django application container
+#   • Fully migrated and accessible database
+#
+# Production Notice:
+#   This tool is not intended for production use unless USERNAME, PASSWORD,
+#   and EMAIL are explicitly supplied as arguments or environment variables.
+#
+# Author: Mohammad Ali Amini
+# Version: 1.0.0
+# License: Proprietary
+###############################################################################
+
+# -----------------------------------------------------------------------------
+# GLOBAL SETTINGS
+# -----------------------------------------------------------------------------
+ADMINUSER="${ADMINUSER:-admin}"
+EMAIL="${EMAIL:-admin@localhost.com}"
+PASSWORD="${PASSWORD:-dev_$(date +%s | sha256sum | head -c 12)}"
+TEMP_OUTPUT=./.output.log       # Temporary file for capturing container output
+COMPOSE_FILE=./compose.yml      # Compose file used for all operations
+
+# -----------------------------------------------------------------------------
+# FUNCTION: show_help
+#
+# Description:
+#   Display usage information, available options, arguments, and examples.
+# -----------------------------------------------------------------------------
+show_help() {
+    cat << EOF
+Usage:
+  source ./yarsin createadmin [OPTIONS] [USERNAME PASSWORD EMAIL]
+
+Options:
+  -h, --help       Show this help message and exit
+  -l, --list       List all administrator-level accounts
+  -c, --check      Check whether any administrator exists (exit-code only)
+
+Arguments:
+  USERNAME PASSWORD EMAIL
+
+Notes:
+  • If no arguments are provided, development-safe defaults will be used.
+  • Admin creation is idempotent; existing privileged accounts are preserved.
+  • Ensure all database migrations are applied before running this tool.
+
+Examples:
+    # Generate a development admin using automatic defaults
+    source ./yarsin createadmin
+
+    # Create a custom admin
+    source ./yarsin createadmin myadmin StrongPass123 admin@example.com
+
+    # Check admin existence without creating one
+    source ./yarsin createadmin --check
+
+    # List all privileged user accounts
+    source ./yarsin createadmin --list
+
+Exit Codes:
+    0   Success
+    1   Skipped – Administrator already exists
+    2   Error – Operation failed (see output)
+    3   Invalid usage or environment restrictions
+EOF
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: troubleshooting
+#
+# Description:
+#   Display recommended steps for diagnosing admin-creation issues.
+# -----------------------------------------------------------------------------
+troubleshooting() {
+    message_suggestion "Recommended Troubleshooting Steps:"
+    message -l 2 "1. Verify database migrations:"
+    message -l 3 "source ./yarsin migrate"
+    message -l 2 "2. Ensure all containers are running:"
+    message -l 3 "docker compose ps"
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: list_admin_users
+#
+# Description:
+#   Display all administrator-level accounts, including:
+#     • Superusers
+#     • Staff users with user-management permissions
+# -----------------------------------------------------------------------------
+list_admin_users() {
+    message_info "Fetching administrator account list..."
+
+    docker compose -f "${COMPOSE_FILE}" run --rm --no-deps api sh -c "
+cat > /tmp/list_admins.py << 'CHECKEOF'
+import os, sys, django
+from django.contrib.auth import get_user_model
+
+try:
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
+    django.setup()
+    User = get_user_model()
+
+    superusers = User.objects.filter(is_superuser=True)
+
+    staff_admins = [
+        u for u in User.objects.filter(is_staff=True)
+        if u.has_perm('auth.add_user') and u.has_perm('auth.change_user')
+    ]
+
+except Exception as e:
+    print('ERROR: ', str(e))
+    sys.exit(2)
+else:
+    print('🔍 ADMINISTRATOR ACCOUNT REPORT')
+    print('=' * 60)
+
+    print(f'SUPERUSERS ({superusers.count()}):')
+    if superusers:
+        for user in superusers:
+            last_login = user.last_login.strftime('%Y-%m-%d %H:%M') if user.last_login else 'Never'
+            print(f'  • {user.username} <{user.email}>')
+            print(f'    Last login: {last_login}')
+    else:
+        print('  No superuser accounts found.')
+
+    print('-' * 45)
+    print(f'STAFF WITH ADMIN PERMISSIONS ({len(staff_admins)}):')
+    if staff_admins:
+        for user in staff_admins:
+            print(f'  • {user.username} <{user.email}>')
+    else:
+        print('  No staff users with administrative permissions.')
+
+    print('=' * 60)
+    print(f'Total users: {User.objects.count()}')
+CHECKEOF
+
+python /tmp/list_admins.py 2>/dev/null || echo '⚠️  Database not initialized or unreachable.'
+"
+
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: check_admin_exists
+#
+# Description:
+#   Determine whether any administrator-level accounts exist.
+#
+# Exit Codes:
+#   0 — At least one admin exists
+#   1 — No admin found
+#   2 — Error occurred
+# -----------------------------------------------------------------------------
+check_admin_exists() {
+    message_info "Checking for existing administrator accounts..."
+
+    docker compose -f "${COMPOSE_FILE}" run --rm --no-deps api sh -c "
+cat > /tmp/check_admin.py << 'PYEOF'
+import os, sys, django
+from django.contrib.auth import get_user_model
+
+try:
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
+    django.setup()
+    User = get_user_model()
+    has_superuser = User.objects.filter(is_superuser=True).exists()
+
+except Exception as e:
+    print('ERROR: ', str(e))
+    sys.exit(2)
+else:
+    print('ADMIN_EXISTS' if has_superuser else 'NO_ADMIN')
+    sys.exit(0 if has_superuser else 1)
+PYEOF
+
+python /tmp/check_admin.py
+" > "${TEMP_OUTPUT}" 2>&1
+
+    local result=$(grep -E '^(ADMIN_EXISTS|NO_ADMIN|ERROR)' "${TEMP_OUTPUT}" || echo "UNKNOWN_ERROR")
+    rm -f "${TEMP_OUTPUT}"
+
+    case "$result" in
+        ADMIN_EXISTS)
+            message_success "Administrator account(s) detected."
+            return 0
+            ;;
+        NO_ADMIN)
+            message_info "No administrator accounts found."
+            return 1
+            ;;
+        *)
+            message_error "$result"
+            message_newline
+            troubleshooting
+            return 2
+            ;;
+    esac
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: create_admin
+#
+# Description:
+#   Create a Django superuser using provided credentials with duplicate checks.
+# -----------------------------------------------------------------------------
+create_admin() {
+    local adminuser="$1"
+    local password="$2"
+    local email="$3"
+
+    docker compose -f "${COMPOSE_FILE}" run --rm --no-deps api sh -c "
+cat > /tmp/create_superuser_safe.py << 'PYEOF'
+import os, sys, django
+from django.contrib.auth import get_user_model
+
+def admin_exists(User):
+    # Check for superusers
+    if User.objects.filter(is_superuser=True).exists():
+        return True
+
+    # Check for staff users with full permissions
+    staff = User.objects.filter(is_staff=True)
+    return any(u.has_perm('auth.add_user') and u.has_perm('auth.change_user') for u in staff)
+
+
+def create_admin(User):
+    User.objects.create_superuser(
+        username='${adminuser}',
+        email='${email}',
+        password='${password}',
+    )
+    return True
+
+
+if __name__ == '__main__':
+    try:
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
+        django.setup()
+        User = get_user_model()
+
+        if admin_exists(User):
+            print('ADMIN_EXISTS')
+            sys.exit(1)
+
+        create_admin(User)
+        print('ADMIN_CREATED')
+        sys.exit(0)
+
+    except Exception as e:
+        print('ERROR: ', e)
+        sys.exit(2)
+PYEOF
+
+python /tmp/create_superuser_safe.py
+" > "${TEMP_OUTPUT}" 2>&1
+
+    local result=$(grep -E '^(ADMIN_CREATED|ADMIN_EXISTS|ERROR)' "${TEMP_OUTPUT}" || echo "UNKNOWN_ERROR")
+    rm -f "${TEMP_OUTPUT}"
+
+    case "$result" in
+        ADMIN_CREATED)
+            message_success "Administrator account successfully created."
+            message_newline
+
+            message_table header "ADMINISTRATOR CREDENTIALS"
+            message_table row "Username:  ${adminuser}"
+            message_table row "Password:  ${password}"
+            message_table separator
+            message_table row "Email:     ${email}"
+            message_table footer
+            message_newline
+
+            message_note "DEVELOPMENT MODE"
+            message -l 3 "• These credentials are suitable for local development only."
+            message -l 3 "• Do not use automatically generated credentials in production."
+
+            return 0
+            ;;
+
+        ADMIN_EXISTS)
+            message_warning "Administrator creation skipped."
+            message_info -l 2 "A privileged account already exists."
+            message_newline
+            message_suggestion -l 2 "Next steps:"
+            message -l 4 "• View existing admins:        source ./yarsin createadmin --list"
+            message -l 4 "• Create a new admin manually: source ./yarsin createsuperuser"
+
+            return 1
+            ;;
+
+        *)
+            message_error "$result"
+            message_newline
+            troubleshooting
+            return 2
+            ;;
+    esac
+}
+
+# -----------------------------------------------------------------------------
+# MAIN EXECUTION
+# -----------------------------------------------------------------------------
+main() {
+    ENVIRONMENT="${ENVIRONMENT:-development}"
+
+    # Process standalone flags
+    if [[ $# -gt 0 ]]; then
+        case "$1" in
+            -l|--list)  list_admin_users; return $? ;;
+            -c|--check) check_admin_exists; return $? ;;
+            -h|--help|help) show_help; return 0 ;;
+        esac
+    fi
+
+    # Production safeguard
+    if [[ "$ENVIRONMENT" = "production" ]]; then
+        message_warning "Administrator creation via this tool is disabled in production."
+        return 3
+    fi
+
+    # Banner
+    message_welcome "DJANGO ADMINISTRATOR SETUP"
+    message -c magenta "Environment: $(echo "$ENVIRONMENT" | tr a-z A-Z)"
+    message_newline
+
+    # Routing for argument counts
+    case $# in
+        0)
+            message_info "Using environment defaults or development-safe generated credentials."
+
+            create_admin "$ADMINUSER" "$PASSWORD" "$EMAIL"
+            ;;
+
+        3)
+            create_admin "$1" "$2" "$3"
+            ;;
+
+        *)
+            message_error "Invalid number of arguments."
+            echo ""
+            message_suggestion "Usage:"
+            message -l 2 "  source ./yarsin createadmin"
+            message -l 2 "  source ./yarsin createadmin <user> <pass> <email>"
+            message -l 2 "  source ./yarsin createadmin --list"
+            message -l 2 "  source ./yarsin createadmin --check"
+            message -l 2 "  source ./yarsin createadmin --help"
+            return 3
+            ;;
+    esac
+}
+
+main "$@"
