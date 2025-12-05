@@ -37,6 +37,8 @@ FROM python AS development-run-stage
 # Set the build environment and app home directory
 ARG WORK_DIRECTORY=/app
 
+ENV ENVIRONMENT=development
+
 # Set environment variables to prevent Python from writing pyc files and to ensure that Python output is unbuffered
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
