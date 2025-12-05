@@ -84,6 +84,17 @@ convert_dotted_path_to_slash() {
     echo "$slash_path"
 }
 
+# Function: convert_slash_path_to_dotted
+# Description: Converts a slashed path to a path with dots.
+# Arguments:
+#   $1: Slashed path to be converted
+# Output: Path with dots
+convert_slashed_path_to_dot() {
+    local slashed_path=$1
+    local dot_path=$(echo "$slashed_path" | tr '/' '.')
+    echo "$dot_path"
+}
+
 # Function: replace_all
 # Description: Replaces all occurrences of a search term within a given text
 #              and prints whether the operation was successful.

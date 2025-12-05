@@ -9,32 +9,23 @@ generate_admin_py() {
 
     cat > "$file_path" <<EOF
 """
-admin.py
----------
+Admin configuration for the $(to_capitalize "${app_name}") app.
 
-Register models of $(to_capitalize "${app_name}") app to Django admin interface.
+Registers models with Django's admin interface for management.
+This module serves as the bridge between your models and the admin dashboard.
 
-Best Practices:
-    - Always use ModelAdmin to customize the admin interface.
-    - Avoid heavy logic; keep admin focused on registration and display.
-    - Use list_display, search_fields, and list_filter for usability.
+Key considerations:
+    - Use @admin.register() decorator for cleaner registration
+    - Define ModelAdmin classes to customize admin behavior
+    - Implement list_display, search_fields, and list_filter for usability
+    - Keep admin logic minimal; move business logic to models or services
 
-Examples (Cheat Sheet):
-    from django.contrib import admin
-    from .models import MyModel
-
-    # Example of registering a model manually
-    admin.site.register(MyModel)
-
-    @admin.register(MyModel)
-    class MyModelAdmin(admin.ModelAdmin):
-        list_display = ('id', 'name', 'created_at')
-        search_fields = ('name',)
-        list_filter = ('status',)
+Note: Uncomment and customize the imports and registrations below.
 """
 
 # from django.contrib import admin
-# from .models import *
+
+# from $(convert_slashed_path_to_dot "${APPS_DIRECTORY}").${app_name} import models
 EOF
 }
 
@@ -55,28 +46,15 @@ generate_apps_py() {
 
     cat > "$file_path" <<EOF
 """
-apps.py
--------
+App configuration for the $(to_capitalize "${app_name}") app.
 
-Configuration for the $(to_capitalize "${app_name}") app.
+Defines the AppConfig class that registers this app with Django.
+This configuration controls how Django identifies and initializes the application.
 
-This file defines the AppConfig class, which registers the app with Django
-and provides essential metadata for administration and initialization.
-
-Guidelines and Best Practices:
-    1. App Identification:
-        - Set 'name' to the correct Python path (e.g., '${app_config_name}')
-          to ensure Django recognizes the app.
-        - Maintain consistent naming conventions across all apps.
-    2. Administration:
-        - Use 'verbose_name' for a human-readable name in admin interfaces.
-        - Keep AppConfig focused on configuration; avoid business logic here.
-    3. Models:
-        - Always define 'default_auto_field' to specify the default primary key type.
-    4. Maintainability:
-        - Keep AppConfig classes simple and clean for easier project scaling.
-        - Avoid redundant or unnecessary attributes.
-
+Important notes:
+    - The 'name' attribute must match the Python import path
+    - AppConfig can be extended for advanced initialization (e.g., signals)
+    - Set default_auto_field for consistent primary key behavior
 """
 
 from django.apps import AppConfig
@@ -84,14 +62,10 @@ from django.apps import AppConfig
 
 class $(to_capitalize "${app_name}")Config(AppConfig):
     """
-    AppConfig class for the $(to_capitalize "${app_name}") application.
+    Configuration class for the $(to_capitalize "${app_name}") application.
 
-    Provides metadata for Django to properly initialize and manage the app.
-
-    Key Attributes:
-        - name: Python path of the app for registration.
-        - verbose_name: Human-readable app name for admin interfaces.
-        - default_auto_field: Default primary key type for models.
+    Provides Django with essential metadata about this app including
+    its location, display name, and default settings.
     """
 
     default_auto_field = 'django.db.models.BigAutoField'
@@ -109,26 +83,16 @@ generate_models_py() {
 
     cat > "$file_path" <<EOF
 """
-models.py
----------
+Data models for the $(to_capitalize "${app_name}") app.
 
-Define and manage data models for the $(to_capitalize "${app_name}") app using Django ORM.
+Defines the database schema using Django ORM. Models represent the core
+data structures and encapsulate essential business logic and validations.
 
-This file contains model classes that represent the app's database schema
-and encapsulate related business logic where appropriate.
-
-Guidelines and Best Practices:
-    1. Field Naming:
-        - Use clear and descriptive field names.
-        - Follow consistent naming conventions across all models.
-    2. String Representation:
-        - Always define __str__ for human-readable object representation.
-    3. Business Logic:
-        - Keep models lean; complex or repeated logic should go to managers, services, or utilities.
-    4. Meta Options:
-        - Use Meta class for ordering, verbose_name, db_table, or constraints when necessary.
-    5. Maintainability:
-        - Avoid hard-coded values; use constants or choices for fields like status, type, or category.
+Key considerations:
+    - Define __str__() for human-readable object representation
+    - Use Meta class for ordering, permissions, and table configurations
+    - Keep business logic focused; extract complex operations when needed
+    - Add docstrings to model classes and complex methods
 """
 
 # from django.db import models
@@ -153,31 +117,21 @@ generate_tests_py() {
 
     cat > "$file_path" <<EOF
 """
-tests.py
----------
+Test suite for the $(to_capitalize "${app_name}") app.
 
-Unit tests for the $(to_capitalize "${app_name}") app.
+Contains automated tests to verify app functionality and prevent regressions.
+Tests cover models, views, forms, and other components as needed.
 
-This file contains automated tests to verify the behavior of models, views,
-and other components in the app. Tests ensure code correctness and
-facilitate maintainability.
-
-Guidelines and Best Practices:
-    1. Test Structure:
-        - Use TestCase or TransactionTestCase from django.test.
-        - Keep tests small, focused, and isolated.
-        - Name test methods clearly: test_<behavior>_<condition>.
-    2. Setup and Fixtures:
-        - Use setUp() or fixtures to initialize test data consistently.
-        - Avoid external dependencies that make tests slow or flaky.
-    3. Maintainability:
-        - Write tests that are readable and self-explanatory.
-        - Test edge cases and expected error handling.
-        - Keep tests fast to support frequent execution in CI/CD pipelines.
+Testing tips:
+    - Use descriptive test method names (test_<scenario>_<expected>)
+    - Keep tests independent and focused on single behaviors
+    - Use setUp() for shared test data preparation
+    - Test both success paths and error conditions
 """
 
 # from django.test import TestCase
-# from .models import *
+
+# from $(convert_slashed_path_to_dot "${APPS_DIRECTORY}").${app_name} import models
 
 # Example TestCase
 # class ExampleTestCase(TestCase):
@@ -195,40 +149,21 @@ generate_urls_py() {
 
     cat > "$file_path" <<EOF
 """
-urls.py
----------
+URL routing for the $(to_capitalize "${app_name}") app.
 
-URL configuration for the $(to_capitalize "${app_name}") application.
+Defines URL patterns that map incoming requests to appropriate views.
+Use this file to organize all app-specific routes in one place.
 
-This file defines URL patterns for the app and connects incoming HTTP
-requests to the appropriate views.
-
-Guidelines and Best Practices:
-    1. Namespacing:
-        - Always define 'app_name' to enable URL namespacing.
-        - Avoid name collisions when using reverse() or the {% url %} template tag.
-    2. URL Naming:
-        - Use clear, descriptive names for endpoints (e.g., 'list', 'detail', 'create').
-        - Keep URLs RESTful and consistent across the app.
-    3. App-level Routing:
-        - Maintain app-specific routes within the app.
-        - Avoid overloading project-level urls.py with internal routes.
-        - Consider splitting into multiple modules if the app grows
-          (e.g., api_urls.py, admin_urls.py).
-    4. Views:
-        - Use Function-based Views (FBVs) for simple endpoints.
-        - Use Class-based Views (CBVs) for reusable or structured behavior.
-        - Always call .as_view() when using CBVs in urlpatterns.
-
-Attributes:
-    app_name (str): Namespace identifier for the $(to_capitalize "${app_name}") app.
-    url_prefix (str): Optional prefix for grouping routes.
-    urlpatterns (list): List of URL patterns handled by this app.
+Important notes:
+    - Define 'app_name' for namespace support in reverse URL lookups
+    - Use descriptive names in path() for clarity and maintainability
+    - Consider using include() for complex routing hierarchies
+    - Always call .as_view() for class-based views
 """
 
 from django.urls import path
 
-# from . import views
+# from $(convert_slashed_path_to_dot "${APPS_DIRECTORY}").${app_name} import views
 
 app_name = "$(to_lower "${app_name}")"
 url_prefix = ""
@@ -260,36 +195,21 @@ generate_views_py() {
 
     cat > "$file_path" <<EOF
 """
-views.py
----------
+View definitions for the $(to_capitalize "${app_name}") app.
 
-View definitions for the $(to_capitalize "${app_name}") app, including
-function-based views (FBVs) and class-based views (CBVs).
+Contains function-based and class-based views that handle HTTP requests
+and return appropriate responses. Views connect URL patterns to app logic.
 
-This file handles HTTP requests and responses, connecting models and templates
-to present data and behavior to users.
-
-Guidelines and Best Practices:
-    1. Responsibilities:
-        - Keep views thin; delegate business logic to models, managers, or services.
-        - Focus on request/response handling and data formatting.
-    2. Naming and Clarity:
-        - Name views clearly and consistently for maintainability.
-        - Use descriptive names reflecting purpose, e.g., 'item_list', 'user_detail'.
-    3. Choosing FBV vs CBV:
-        - Use FBVs for simple endpoints.
-        - Use CBVs for reusable or structured behavior.
-        - Always call .as_view() when using CBVs in urlpatterns.
-    4. Error Handling:
-        - Return proper HTTP responses (200, 404, 403, 500 as appropriate).
-        - Handle exceptions gracefully, e.g., using get_object_or_404.
-    5. Maintainability:
-        - Keep views readable and avoid embedding complex logic.
+Key considerations:
+    - Keep views focused on request/response handling
+    - Delegate business logic to models, services, or utilities
+    - Use get_object_or_404() for object retrieval with automatic 404
+    - Return proper HTTP status codes for different scenarios
 """
 
 from django.shortcuts import render
 
-# from .models import *
+# from $(convert_slashed_path_to_dot "${APPS_DIRECTORY}").${app_name} import models
 
 # Example function-based view
 # def example_view(request):
@@ -300,5 +220,88 @@ from django.shortcuts import render
 # class ExampleView(View):
 #     def get(self, request):
 #         return render(request, 'example.html', {'data': 'Hello World'})
+EOF
+}
+
+generate_setting_file() {
+    local environment="$1"
+    local filepath="${WORK_DIRECTORY}/${PROJECT_NAME}/settings/${environment}.py"
+
+    # Ensure directory exists
+    if [[ ! -d "$WORK_DIRECTORY" ]]; then
+        mkdir -p "$WORK_DIRECTORY" || {
+            message_error "Cannot create directory: $WORK_DIRECTORY"
+            return 1
+        }
+    fi
+
+    # Check if file already exists
+    if [[ -f "$filepath" ]]; then
+        message_warning " WARNING: target exists, skipping: $filepath"
+        return 0
+    fi
+
+    # Write the settings file
+    cat > "$filepath" << EOF
+"""
+$(to_capitalize "${environment}") Environment Settings
+
+Environment: ${environment}
+Inherits: .base
+Overrides: Base settings as needed for '${environment}' operations
+
+Key Responsibilities:
+    1. Environment-specific configuration overrides
+    2. Security settings appropriate for '${environment}'
+    3. Service endpoints and credentials for '${environment}'
+
+Configuration Method:
+    - Set DJANGO_SETTINGS_MODULE='${PROJECT_NAME}.settings.${environment}'
+    - Use environment variables for sensitive data
+    - Extend/override only what's necessary from base settings
+
+Note: This file is auto-generated. Manual edits may be overwritten.
+"""
+
+from .base import *  # pylint: disable=unused-wildcard-import, wildcard-import  # noqa
+EOF
+
+   return 0
+}
+
+generate_urls_file() {
+    local environment="$1"
+    local filename="$2"
+    local filepath="${WORK_DIRECTORY}/${PROJECT_NAME}/urls/${filename}.py"
+    
+    # Determine environment-specific info
+    local env_title="$(to_capitalize "$environment")"
+    
+    case "$environment" in
+        development) local purpose="Full debugging and development tools" ;;
+        staging) local purpose="QA testing with controlled access" ;;
+        production) local purpose="Public endpoints with security hardening" ;;
+        testing) local purpose="Automated test execution" ;;
+        *) local purpose="Custom ${environment} configuration" ;;
+    esac
+
+    cat > "$filepath" <<EOF
+"""
+${env_title} URL Configuration
+
+Environment: ${environment}
+Purpose: ${purpose}
+Inherits: .base.urlpatterns
+Security: Review access controls before deployment
+
+Usage: Add ${environment}-specific patterns below. All access should be logged.
+"""
+
+from .base import urlpatterns as base_urlpatterns
+
+urlpatterns = base_urlpatterns + [
+    # ${env_title}-specific patterns
+    # Apply appropriate authentication/authorization
+]
 EOF
 }

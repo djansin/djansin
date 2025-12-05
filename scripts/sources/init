@@ -6,41 +6,48 @@
 
 copy_env_files() {
     local directory="$1"
+
+    local dir=""
+    local file_name=""
     local new_file=""
+    local new_file_name=""
 
     for file in $directory/example.env.*; do
         if [ -e "$file" ]; then
             dir=$(dirname "$file")
             file_name=$(basename "$file")
+
             new_file_name=${file_name//example/}
             new_file="${dir}/${new_file_name}"
 
             if [ -e "$new_file" ]; then
-                message_warning "WARNING: target exists, skipping: $new_file"
+                message_note "Target exists, skipping: './envs/$new_file_name'"
                 continue
             fi
 
             cp "$file" "$new_file"
-            message_success "Copied $file to $new_file"
+            message_success "Copied './envs/$file_name' to './envs/$new_file_name'"
         fi
     done
 }
 
 create_directories() {
     local directories="$@"
+    local directory_name=""
 
     for directory in $directories; do
+        directory_name="$(basename "$directory")"
         
         if [ -d "$directory" ]; then
-            message_warning "WARNING: Directory exists, skipping: $directory"
+            message_note "Directory exists, skipping: ./$directory_name"
             continue
         fi
 
         mkdir -p "$directory"
         if [ $? -eq 0 ]; then
-            message_success "Directory created: $directory"
+            message_success "Directory created: ./$directory_name"
         else
-            message_error "ERROR: Failed to create directory: $directory"
+            message_error "Failed to create directory: ./$directory_name"
         fi
     done
 }
@@ -50,9 +57,8 @@ init() {
     copy_env_files "${workdir}/envs"
 
     # Start a new project using 'yarsin' with the specified project name
-    docker compose -f ./compose.yml run --rm --no-deps api sh -c "DJANGO_SETTINGS_MODULE=""; run_as $(id -u) yarsin init"
-
-    create_directories apps backups media static templates
+    docker compose -f ./compose.yml run --rm --no-deps api sh -c "DJANGO_SETTINGS_MODULE=""; run_as $(id -u) yarsin init" && 
+        create_directories apps backups media static templates
 }
 
 init "$@"
