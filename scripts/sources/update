@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Initialize the Django projcet
 message_welcome "Starting the requirements update process..."
 python "${workdir}/scripts/sources/update_requirements.py" >/dev/null &
