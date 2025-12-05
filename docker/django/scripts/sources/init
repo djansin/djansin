@@ -3,10 +3,6 @@
 set -o errexit  # Exit script immediately if a command fails
 set -o pipefail # Exit script when a command in a pipeline fails
 
-convert_slashed_path_to_dot "apps/my_apps"
-
-exit 0
-
 # Load scaffold helper functions
 source "${workdir}/sources/_scaffold"
 
@@ -100,10 +96,10 @@ init() {
     # ------------------------------------------------------------
     # URL CONFIGURATION
     # ------------------------------------------------------------
-    
+
     # Create URLs directory and organize routing files
     message_info "Setting up environment-based URL structure..."
-    
+
     # Create URLs directory with __init__.py for Python package
     if mkdir -p "${work_dir}/${project_name}/urls"; then
         # Create __init__.py to make urls a proper Python package
@@ -111,7 +107,7 @@ init() {
             message_warning "Could not create __init__.py in urls directory"
             exit 1
         }
-        
+
         # Move the default urls.py to base.py as our routing foundation
         if [[ -f "${project_name}/urls.py" ]]; then
             mv "${work_dir}/${project_name}/urls.py" "${work_dir}/${project_name}/urls/base.py" || {
@@ -120,7 +116,7 @@ init() {
             }
             message_success "Base URL configuration created: ./${project_name}/urls/base.py"
         fi
-        
+
         # Generate environment-specific URL configuration files
         message_info "Creating environment-specific URL configurations..."
 
@@ -131,7 +127,7 @@ init() {
         (generate_urls_file "development" && 
              message_success "Development URLs created: ./${project_name}/urls/development.py") || 
             (message_warning "Failed to create development URLs" && exit 1 )
-        
+
         (generate_urls_file "testing" && 
              message_success "testing URLs created: ./${project_name}/urls/testing.py") || 
             (message_warning "Failed to create testing URLs" && exit 1 )
@@ -146,7 +142,6 @@ init() {
 
     # Provide final instructions
     message_newline
-     message_newline
     message_table header "Django project '${project_name}' initialized successfully!"
     message_table row "Project Structure Created:"
     message_table row "./${project_name}/"
@@ -165,19 +160,32 @@ init() {
     message_table row "..."
     message_table footer
     message_newline
-    message_suggestion "Quick Start Guide:"
-    message -l 2 "1. Fix project root path in ./settings/base.py:"
-    message -l 3 "   BASE_DIR = Path(__file__).resolve().parent.parent.parent"
-    message -l 2 "2. Configure ALLOWED_HOSTS for development/production:"
-    message -l 3 "   • development.py: ALLOWED_HOSTS = [\"*\"] (for local testing)"
-    message -l 3 "   • production.py: Update with actual domain before deployment"
-    message -l 2 "3. Start services:"
-    message -l 3 "   $ make up"
-    message -l 2 "4. Access application:"
-    message -l 3 "   http://localhost:9000"
-    message -l 2 "5. Documentation:"
-    message -l 3 "   https://gitlab.com/amoosin/djansin"
-        
+    message_suggestion "Quick Start:"
+    message -l 2 "1. Import environment variables (./configs/settings/base.py):"
+    message -l 4 "from environ import Env"
+    message -l 4 "env = Env()"
+
+    message -l 2 "2. Configure base.py settings:"
+    message -l 4 "BASE_DIR = Path(__file__).parent.parent.parent"
+    message -l 4 "SECRET_KEY = env.str(\"SECRET_KEY\")"
+    message -l 4 "DEBUG = env.bool(\"DJANGO_DEBUG\", False)"
+    message -l 4 "ROOT_URLCONF = env.str(\"ROOT_URLCONF\")"
+    message -l 4 "DATABASES = {\"default\": env.db(\"DATABASE_URL\")}"
+    message -l 4 "STATIC_ROOT = env.path(\"STATIC_ROOT\")"
+
+    message -l 2 "3. Set ALLOWED_HOSTS:"
+    message -l 4 "Development (./configs/settings/development.py): ALLOWED_HOSTS = [\"*\"]"
+    message -l 4 "Production (./configs/settings/production.py): Update with domain"
+
+    message -l 2 "4. Launch services:"
+    message -l 4 "$ make up"
+
+    message -l 2 "5. Access application:"
+    message -l 4 "http://localhost:9000"
+
+    message -l 2 "6. View documentation:"
+    message -l 4 "https://gitlab.com/amoosin/djansin"
+
     return 0
 }
  

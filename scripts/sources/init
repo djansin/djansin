@@ -21,7 +21,7 @@ copy_env_files() {
             new_file="${dir}/${new_file_name}"
 
             if [ -e "$new_file" ]; then
-                message_note "Target exists, skipping: './envs/$new_file_name'"
+                message_note "Target exists, skipping: ./envs/$new_file_name"
                 continue
             fi
 
@@ -56,9 +56,10 @@ create_directories() {
 init() {
     copy_env_files "${workdir}/envs"
 
+    create_directories apps backups media static templates core
+
     # Start a new project using 'yarsin' with the specified project name
-    docker compose -f ./compose.yml run --rm --no-deps api sh -c "DJANGO_SETTINGS_MODULE=""; run_as $(id -u) yarsin init" && 
-        create_directories apps backups media static templates
+    docker compose -f ./compose.yml run --rm --no-deps api sh -c "DJANGO_SETTINGS_MODULE=""; run_as $(id -u) yarsin init"
 }
 
 init "$@"

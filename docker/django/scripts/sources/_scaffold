@@ -225,6 +225,7 @@ EOF
 
 generate_setting_file() {
     local environment="$1"
+
     local filepath="${WORK_DIRECTORY}/${PROJECT_NAME}/settings/${environment}.py"
 
     # Ensure directory exists
@@ -271,12 +272,12 @@ EOF
 
 generate_urls_file() {
     local environment="$1"
-    local filename="$2"
-    local filepath="${WORK_DIRECTORY}/${PROJECT_NAME}/urls/${filename}.py"
-    
+
+    local filepath="${WORK_DIRECTORY}/${PROJECT_NAME}/urls/${environment}.py"
+
     # Determine environment-specific info
     local env_title="$(to_capitalize "$environment")"
-    
+
     case "$environment" in
         development) local purpose="Full debugging and development tools" ;;
         staging) local purpose="QA testing with controlled access" ;;
