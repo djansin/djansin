@@ -59,7 +59,11 @@ init() {
     create_directories apps backups media static templates core
 
     # Start a new project using 'yarsin' with the specified project name
-    docker compose -f ./compose.yml run --rm --no-deps api sh -c "DJANGO_SETTINGS_MODULE=""; run_as $(id -u) yarsin init"
+    if [ "$(check_service_status api)" = 0 ]; then
+        docker compose -f ./compose.yml exec api sh -c "run_as $(id -u) yarsin init"
+    else
+        docker compose -f ./compose.yml run --rm --no-deps api sh -c "run_as $(id -u) yarsin init"
+    fi
 }
 
 init "$@"
