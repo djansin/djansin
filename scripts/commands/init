@@ -1,0 +1,382 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: init
+# Description: Copy example environment files by removing the "example." prefix
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="init"
+    [category]="project"
+    [description]="Copy example environment files by stripping the 'example.' prefix"
+    [usage]="yarsin init [OPTIONS]"
+    [version]="1.0.0"
+    [requires]=""
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# -----------------------------------------------------------------------------
+# Default Configuration
+# -----------------------------------------------------------------------------
+# PROJECT_PATH is provided by the yarsin dispatcher and points to the project
+# root. The environment directory defaults to <project-root>/envs.
+# -----------------------------------------------------------------------------
+: "${ENV_DIR:=${PROJECT_PATH}/envs}"
+
+# File pattern to look for in the environment directory
+: "${ENV_PATTERN:=example.env.*}"
+
+# Overwrite existing target files (0 = skip, 1 = overwrite)
+: "${ENV_FORCE:=0}"
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the init command.
+#
+# Description:
+#   Copies all example environment files from the environment directory to
+#   their real counterparts by removing the "example." prefix.
+#   For example: example.env.api -> .env.api
+#
+#   By default, files are read from <project-root>/envs and written alongside
+#   them. Use --dir to override the source directory.
+#
+# Options:
+#   -h, --help          Display this help message
+#   -d, --dir <path>    Specify environment directory (default: <root>/envs)
+#   -f, --force         Overwrite existing target files
+#
+# Environment Variables:
+#   ENV_DIR       Environment files directory (default: <project-root>/envs)
+#   ENV_PATTERN   Glob pattern to match example files (default: example.env.*)
+#   ENV_FORCE     Whether to overwrite existing files: 0 or 1 (default: 0)
+#
+# Returns:
+#   0 - Environment files initialized successfully
+#   1 - Invalid arguments
+#   2 - Initialization failed
+# =============================================================================
+main() {
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+            -d|--dir)
+                if [[ -z "${2:-}" ]]; then
+                    alenaal_error "Option --dir requires a path argument"
+                    return 1
+                fi
+                ENV_DIR="$2"
+                shift 2
+                ;;
+            --dir=*)
+                ENV_DIR="${1#*=}"
+                shift
+                ;;
+            -f|--force)
+                ENV_FORCE=1
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                alenaal_error "Unknown option: $1"
+                alenaal_suggestion "Use 'yarsin init --help' for usage information"
+                return 1
+                ;;
+            *)
+                alenaal_error "Unexpected argument: $1"
+                alenaal_suggestion "Use 'yarsin init --help' for usage information"
+                return 1
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Normalize ENV_DIR to an absolute path
+    # -------------------------------------------------------------------------
+    # Relative paths (from --dir or ENV_DIR env var) are resolved against the
+    # project root, not the current working directory. This makes behavior
+    # consistent no matter where yarsin is invoked from.
+    # -------------------------------------------------------------------------
+    if [[ "${ENV_DIR}" != /* ]]; then
+        ENV_DIR="${PROJECT_PATH}/${ENV_DIR#./}"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 1: Copy Environment Files
+    # -------------------------------------------------------------------------
+    alenaal_info "Initializing environment files from: ${ENV_DIR}"
+    local status=0
+    _copy_env_files "${ENV_DIR}" || status=$?
+
+    # -------------------------------------------------------------------------
+    # Completion Message
+    # -------------------------------------------------------------------------
+    alenaal_newline
+    if [[ $status -eq 0 ]]; then
+        alenaal_success "Environment file initialization completed!"
+        alenaal_info "Next steps:"
+        alenaal_format "1. Review and update environment files in ${ENV_DIR}/" --indent 2
+        alenaal_format "2. Ensure secrets and credentials are properly set" --indent 2
+        alenaal_newline
+        return 0
+    else
+        alenaal_error "Environment file initialization failed"
+        return 2
+    fi
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the init command.
+# =============================================================================
+show_help() {
+    alenaal_newline
+    alenaal_format "init - Initialize Environment Files" --header --icon "🌱"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Scans the environment directory for files matching 'example.env.*'" --item
+    alenaal_format "and copies each one by removing the 'example.' prefix." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin init                       # Use <project-root>/envs" --item --icon "⇢"
+    alenaal_format "yarsin init --dir ./config        # Use custom directory" --item --icon "⇢"
+    alenaal_format "yarsin init --force               # Overwrite existing files" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+    alenaal_format --item --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 3
+
+    alenaal_format --item --bold -- "-d, --dir <path>"
+    alenaal_format "Specify environment directory (default: <project-root>/envs)" --indent 3
+
+    alenaal_format --item --bold -- "-f, --force"
+    alenaal_format "Overwrite existing target files" --indent 3
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+
+    alenaal_format "ENV_DIR" --list --bold --indent 3
+    alenaal_format "Environment files directory" --indent 4
+    alenaal_format "Default: <project-root>/envs" --indent 4 --italic
+
+    alenaal_format "ENV_PATTERN" --list --bold --indent 3
+    alenaal_format "Glob pattern to match example files" --indent 4
+    alenaal_format "Default: example.env.*" --indent 4 --italic
+
+    alenaal_format "ENV_FORCE" --list --bold --indent 3
+    alenaal_format "Whether to overwrite existing files: 0 or 1 (default: 0)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Naming Convention Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Naming Convention:" --section --example
+    alenaal_format "The command strips the 'example.' prefix from each source file:" --item
+    alenaal_newline
+
+    alenaal_format "example.env.api   ->  .env.api" --indent 4 --bold
+    alenaal_format "example.env.db    ->  .env.db" --indent 4 --bold
+    alenaal_format "example.env.app   ->  .env.app" --indent 4 --bold
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Basic usage with project-root envs directory" --subsection --italic
+    alenaal_format "yarsin init" --icon "⇢" --bold --indent 4
+    alenaal_format "Copies example.env.* from <project-root>/envs/ to .env.*" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Custom directory (resolved against project root)" --subsection --italic
+    alenaal_format "yarsin init --dir ./config" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Copies files from <project-root>/config/" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Absolute directory path" --subsection --italic
+    alenaal_format "yarsin init --dir /etc/myapp/envs" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Uses the given absolute path as-is" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Overwrite existing files" --subsection --italic
+    alenaal_format "yarsin init --force" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Replaces any existing .env.* files" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0   - Environment files initialized successfully" --item --list
+    alenaal_format "1   - Invalid arguments" --item --list
+    alenaal_format "2   - Initialization failed (copy error, missing directory, etc.)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _copy_env_files
+#
+# Copies example environment files to actual environment files.
+#
+# Description:
+#   Finds all files matching the pattern (default: "example.env.*") in the
+#   specified directory and copies them to files with the "example." prefix
+#   removed. For example, "example.env.db" is copied to ".env.db".
+#
+# Args:
+#   $1 - directory: Directory containing environment files (absolute path)
+#
+# Returns:
+#   0 - All files copied successfully (or skipped)
+#   1 - Directory does not exist or copy failed
+# -----------------------------------------------------------------------------
+_copy_env_files() {
+    local directory="$1"
+
+    # Validate directory exists
+    if [[ ! -d "$directory" ]]; then
+        alenaal_error "Environment directory not found: $directory"
+        alenaal_suggestion "Create the directory and add example.env.* files first"
+        return 1
+    fi
+
+    local dir=""
+    local file_name=""
+    local new_file=""
+    local new_file_name=""
+    local copied_count=0
+    local skipped_count=0
+    local failed_count=0
+    local found_any=0
+
+    # Iterate through all matching example environment files
+    shopt -s nullglob
+    for file in "$directory"/$ENV_PATTERN; do
+        found_any=1
+
+        if [[ ! -f "$file" ]]; then
+            continue
+        fi
+
+        dir=$(dirname "$file")
+        file_name=$(basename "$file")
+
+        # Remove "example." prefix to get target filename
+        new_file_name="${file_name#example}"
+        new_file="${dir}/${new_file_name}"
+
+        # Skip if target already exists (unless --force)
+        if [[ -f "$new_file" && "${ENV_FORCE}" != "1" ]]; then
+            alenaal_note "Environment file already exists, skipping: ${new_file}"
+            skipped_count=$((skipped_count + 1))
+            continue
+        fi
+
+        # Copy the file
+        if cp "$file" "$new_file"; then
+            alenaal_success "Created: ${new_file}"
+            copied_count=$((copied_count + 1))
+        else
+            alenaal_error "Failed to copy: ${file}"
+            failed_count=$((failed_count + 1))
+        fi
+    done
+    shopt -u nullglob
+
+    # -------------------------------------------------------------------------
+    # Summary
+    # -------------------------------------------------------------------------
+    alenaal_newline
+    if [[ $found_any -eq 0 ]]; then
+        alenaal_warning "No example environment files found in ${directory}"
+        alenaal_suggestion "Expected files matching pattern: ${ENV_PATTERN}"
+        return 0
+    fi
+
+    alenaal_format "Summary: ${copied_count} created, ${skipped_count} skipped, ${failed_count} failed" --item
+
+    if [[ $failed_count -gt 0 ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

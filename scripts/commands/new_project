@@ -1,0 +1,477 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: init
+# Description: Initialize a new project with directory structure and environment files
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="new_project"
+    [category]="project"
+    [description]="Initialize a new project with directory structure and environment files"
+    [usage]="yarsin new_project [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="docker docker-compose"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+# -----------------------------------------------------------------------------
+# Default Configuration
+# -----------------------------------------------------------------------------
+# These variables define default paths and behavior for project initialization.
+# They can be overridden by environment variables.
+# -----------------------------------------------------------------------------
+
+# Compose file path for Docker Compose
+: "${COMPOSE_FILE:=./compose.yml}"
+
+# Default directories to create when initializing a project
+: "${PROJECT_DIRS:=apps djansin contrib backups media static templates locale tests}"
+
+# Environment files directory
+: "${ENV_DIR:=./envs}"
+
+# Working directory (default: current directory)
+: "${WORK_DIR:=${WORKDIR:-$(pwd)}}"
+
+
+# =============================================================================
+# MAIN FUNCTION
+# 
+# Main execution flow for the new_project command.
+#
+# Description:
+#   Initializes a new project by:
+#   1. Creating common directory structures (apps, djansin, core, etc.)
+#   2. Copying example environment files to actual environment files
+#   3. Running the initialization inside the API container to set up
+#      Django-related files (settings, URLs, etc.)
+#
+# Options:
+#   -h, --help    Display this help message
+#
+# Environment Variables:
+#   COMPOSE_FILE      Docker Compose file path (default: ./compose.yml)
+#   PROJECT_DIRS      Directories to create (default: apps djansin core backups media static templates)
+#   ENV_DIR           Environment files directory (default: ./envs)
+#   WORK_DIRECTORY    Working directory (default: current directory)
+#
+# Returns:
+#   0 - Project initialized successfully
+#   1 - Invalid arguments
+#   2 - Initialization failed
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                alenaal_error "Unknown option: $1"
+                alenaal_suggestion "Use 'yarsin new_project --help' for usage information"
+                return 1
+                ;;
+            *)
+                alenaal_error "Unexpected argument: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Step 1: Copy Environment Files
+    # -------------------------------------------------------------------------
+    alenaal_info "Setting up environment configuration files..."
+    _copy_env_files "${WORK_DIR}/${ENV_DIR}"
+    alenaal_success "Environment files configured"
+
+    # -------------------------------------------------------------------------
+    # Step 2: Create Project Directories
+    # -------------------------------------------------------------------------
+    alenaal_info "Creating project directory structure..."
+    _create_directories $PROJECT_DIRS
+    alenaal_success "Project directories created"
+
+    # -------------------------------------------------------------------------
+    # Step 3: Run Container Initialization
+    # -------------------------------------------------------------------------
+    alenaal_info "Running container initialization..."
+    
+    # Check if compose file exists
+    if [[ ! -f "${COMPOSE_FILE}" ]]; then
+        alenaal_warning "Docker Compose file not found: ${COMPOSE_FILE}"
+        alenaal_suggestion "Skipping container initialization. Run 'yarsin init' after creating compose.yml"
+    else
+        # Run init inside the API container without dependencies
+        if docker compose -f "${COMPOSE_FILE}" run --rm --no-deps api \
+            bash -c "run-as $(id -u) -- yarsin init" 2>/dev/null; then
+            alenaal_success "Container initialization completed"
+        else
+            alenaal_warning "Container initialization failed"
+            alenaal_suggestion "You may need to build the containers first: docker compose build"
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Completion Message
+    # -------------------------------------------------------------------------
+    alenaal_newline
+    alenaal_success "Project initialization completed!"
+    alenaal_info "Next steps:"
+    alenaal_format "1. Review and update environment files in ${ENV_DIR}/" --indent 2
+    alenaal_format "2. Build containers: make build" --indent 2
+    alenaal_format "3. Start services: make up" --indent 2
+    alenaal_newline
+
+    return 0
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the new_project command.
+#
+# Provides detailed information about project initialization including
+# directory structure, environment files, and next steps.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "new_project - Initialize New Project" --header --icon "🚀"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Creates the standard directory structure, copies example environment files," --item
+    alenaal_format "and runs initialization inside the API container to set up Django files." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin new_project                    # Initialize in current directory" --item --icon "⇢"
+    alenaal_format "cd /my/project && yarsin new_project  # Initialize in specific directory" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+    alenaal_format --item --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 3
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "COMPOSE_FILE" --list --bold --indent 3
+    alenaal_format "Docker Compose file path (default: ./compose.yml)" --indent 4
+
+    alenaal_format "PROJECT_DIRS" --list --bold --indent 3
+    alenaal_format "Space-separated list of directories to create" --indent 4
+    alenaal_format "Default: apps djansin core backups media static templates" --indent 4 --italic
+
+    alenaal_format "ENV_DIR" --list --bold --indent 3
+    alenaal_format "Environment files directory (default: ./envs)" --indent 4
+
+    alenaal_format "WORK_DIRECTORY" --list --bold --indent 3
+    alenaal_format "Working directory for initialization (default: current directory)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Directory Structure Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Directory Structure:" --section --example
+    alenaal_format "The command creates the following directories:" --item
+
+    alenaal_format "apps/" --list --bold --indent 4
+    alenaal_format "Custom Django applications" --indent 5 --italic
+
+    alenaal_format "djansin/" --list --bold --indent 4
+    alenaal_format "Core package directory" --indent 5 --italic
+
+    alenaal_format "core/" --list --bold --indent 4
+    alenaal_format "Core functionality modules" --indent 5 --italic
+
+    alenaal_format "backups/" --list --bold --indent 4
+    alenaal_format "Database backup storage" --indent 5 --italic
+
+    alenaal_format "media/" --list --bold --indent 4
+    alenaal_format "User-uploaded media files" --indent 5 --italic
+
+    alenaal_format "static/" --list --bold --indent 4
+    alenaal_format "Collected static files" --indent 5 --italic
+
+    alenaal_format "templates/" --list --bold --indent 4
+    alenaal_format "Django template files" --indent 5 --italic
+
+    alenaal_format "envs/" --list --bold --indent 4
+    alenaal_format "Environment configuration files" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Files Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Files:" --section --info
+    alenaal_format "The command copies example environment files from envs/example.env.* to envs/.*:" --item
+
+    alenaal_format "example.env.db" --list --bold --indent 4
+    alenaal_format "Copied to .env.db - Database connection settings" --indent 5 --italic
+
+    alenaal_format "example.env.app" --list --bold --indent 4
+    alenaal_format "Copied to .env.app - Application settings" --indent 5 --italic
+
+    alenaal_format "example.env.api" --list --bold --indent 4
+    alenaal_format "Copied to .env.api - API configuration" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Basic initialization" --subsection --italic
+    alenaal_format "yarsin init" --icon "⇢" --bold --indent 4
+    alenaal_format "Creates standard directory structure and environment files" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Initialize with environment variables" --subsection --italic
+    alenaal_format "export PROJECT_DIRS='apps libs scripts'" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export ENV_DIR=./config" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin init" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates custom directory structure and env config" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Initialize in specific directory" --subsection --italic
+    alenaal_format "WORK_DIRECTORY=/app yarsin init" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Initializes project in /app directory" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Skip database initialization for quick start" --subsection --italic
+    alenaal_format "yarsin new_project && yarsin migrate" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Initialize then manually run migrations" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Docker and Docker Compose for container initialization" --item --list
+    alenaal_format "Example environment files in envs/ (if running container init)" --item --list
+    alenaal_format "Write permissions in current directory" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0   - Project initialized successfully" --item --list
+    alenaal_format "1   - Invalid arguments" --item --list
+    alenaal_format "2   - Initialization failed (directory creation, file copy, etc.)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for project initialization.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _copy_env_files
+#
+# Copies example environment files to actual environment files.
+#
+# Description:
+#   Finds all files matching the pattern "example.env.*" in the specified
+#   directory and copies them to files with the "example." prefix removed.
+#   For example, "example.env.db" is copied to ".env.db".
+#
+# Args:
+#   $1 - directory: Directory containing environment files (default: ./envs)
+#
+# Returns:
+#   0 - All files copied successfully (or skipped)
+#   1 - Directory does not exist
+# -----------------------------------------------------------------------------
+_copy_env_files() {
+    local directory="$1"
+    
+    # Validate directory exists
+    if [[ ! -d "$directory" ]]; then
+        alenaal_warning "Environment directory not found: $directory"
+        alenaal_suggestion "Creating directory: $directory"
+        mkdir -p "$directory" || {
+            alenaal_error "Failed to create directory: $directory"
+            return 1
+        }
+    fi
+
+    local dir=""
+    local file_name=""
+    local new_file=""
+    local new_file_name=""
+    local copied_count=0
+
+    # Iterate through all example environment files
+    for file in $directory/example.env.*; do
+        if [[ -f "$file" ]]; then
+            dir=$(dirname "$file")
+            file_name=$(basename "$file")
+            
+            # Remove "example." prefix to get target filename
+            new_file_name="${file_name//example/}"
+            new_file="${dir}/${new_file_name}"
+
+            # Skip if target already exists
+            if [[ -f "$new_file" ]]; then
+                alenaal_note "Environment file already exists, skipping: ${ENV_DIR}/${new_file_name}"
+                continue
+            fi
+            
+            # Copy the file
+            if cp "$file" "$new_file"; then
+                alenaal_success "Created: ${ENV_DIR}/${new_file_name}"
+                copied_count=$((copied_count + 1))
+            else
+                alenaal_error "Failed to copy: ${ENV_DIR}/${file_name}"
+                return 1
+            fi
+        fi
+    done
+    
+    if [[ $copied_count -eq 0 ]]; then
+        alenaal_note "No example environment files found in ${directory}"
+    fi
+    
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _create_directories
+#
+# Creates multiple directories if they don't already exist.
+#
+# Description:
+#   Takes a list of directory names and creates each one in the current
+#   working directory. Skips directories that already exist.
+#
+# Args:
+#   $@ - Directory names to create (space-separated)
+#
+# Returns:
+#   0 - All directories created successfully (or already exist)
+#   1 - Failed to create one or more directories
+# -----------------------------------------------------------------------------
+_create_directories() {
+    local directories=("$@")
+    local created_count=0
+    local failed_count=0
+    
+    # If no directories specified, use default
+    if [[ ${#directories[@]} -eq 0 ]]; then
+        directories=($PROJECT_DIRS)
+    fi
+    
+    for directory in "${directories[@]}"; do
+        # Remove trailing slash if present for clean output
+        local dir_name="${directory%/}"
+        
+        if [[ -d "$dir_name" ]]; then
+            alenaal_note "Directory already exists: ${dir_name}"
+            continue
+        fi
+        
+        # Create directory with parent directories if needed
+        if mkdir -p "$dir_name"; then
+            alenaal_success "Directory created: ${dir_name}"
+            created_count=$((created_count + 1))
+        else
+            alenaal_error "Failed to create directory: ${dir_name}"
+            ((failed_count++))
+        fi
+    done
+    
+    if [[ $failed_count -gt 0 ]]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

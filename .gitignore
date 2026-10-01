@@ -12,6 +12,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .coverage
+.ruff_cache/
 
 # === Virtual environments ===
 # Don't commit virtual environments — developers should create their own.

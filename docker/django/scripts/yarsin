@@ -1,85 +1,505 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # Script: yarsin
-# Description: Dispatcher script that routes commands to appropriate handlers
-#              Supports both custom source functions and Django management commands
-# Usage: ./yarsin <function_name|django_command> [args...]
+# Description: Command dispatcher that routes to appropriate handlers.
+#              Supports both explicit subcommands and default command fallback.
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ARGUMENT PROCESSING LOGIC
+# -----------------------------------------------------------------------------
+# 1. If first argument matches an executable in commands/, it's treated as a
+#    subcommand name. Remaining arguments are passed to that subcommand.
+# 2. If first argument doesn't match any subcommand, ALL arguments are passed
+#    to the default subcommand.
+# 3. Special flags (--help, -h) show help and exit.
+#
+# Usage:
+#   # Explicit subcommand execution
+#   yarsin <subcommand> [subcommand-options...] [subcommand-arguments...]
+#
+#   # Default subcommand execution (when first arg isn't a known subcommand)
+#   yarsin [arguments...]
+#
 # Examples:
-#   ./yarsin database_init            # Custom function
-#   ./yarsin migrate                  # Django command
-#   ./yarsin startproject myproject   # Django admin command
-# Environment Variables:
-#   WORK_DIRECTORY - Optional, directory containing manage.py (defaults to current)
+#   ./yarsin database_init --force                # Explicit subcommand
+#   ./yarsin migrate --dry-run production         # Default subcommand
+#   ./yarsin --help                               # Show general help
+#   ./yarsin database_init --help                 # Show subcommand help
+#
 # Dependencies:
-#   - Sourced files: _constants.sh, _messages.sh, _utils.sh
-#   - Django project structure for Django commands
-#   - Custom source files in sources/ directory for function commands
+#   - Sourced files: constants.sh, alenaal.sh, utils.sh
+#   - Executable files in commands/ directory
 # -----------------------------------------------------------------------------
 
-# Define the project and workdir directory
-workdir="$(cd "$(dirname "$0")" && pwd)"  # Get script's directory by changing to it then printing path
-project_dir=$(realpath "$workdir")         # Get canonical absolute path (resolves symlinks)
+# -----------------------------------------------------------------------------
+# Path Resolution
+# -----------------------------------------------------------------------------
+# Determines script directory and canonical project paths for consistent
+# file location regardless of how the script is invoked.
+# -----------------------------------------------------------------------------
+WORKDIR=$(cd $(dirname "$0") && pwd)                # Script's directory
+PROJECT_PATH=$(realpath "$WORKDIR")                 # Resolve symlinks to absolute path
+YARSIN_LIB_PATH="${PROJECT_PATH}/yarsin-libs"
 
-# Source necessary library files for shared functionality
-source "${workdir}/sources/_constants.sh"  # Contains constant values and configuration
-source "${workdir}/sources/_messages.sh"   # Contains formatted output functions
-source "${workdir}/sources/_utils.sh"      # Contains utility helper functions
+YARSIN_CORE_PATH="${YARSIN_LIB_PATH}/core"
+YARSIN_COMMANDS_PATH="${YARSIN_LIB_PATH}/commands"
 
 # -----------------------------------------------------------------------------
-# Main execution: Command routing logic
+# Core Library Loading
 # -----------------------------------------------------------------------------
+# Loads shared functionality libraries that provide common utilities,
+# formatted output, and constants used throughout the dispatcher.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/constants.sh"                  # Constants and configuration
+source "${YARSIN_CORE_PATH}/alenaal.sh"                    # Formatted output functions
+source "${YARSIN_CORE_PATH}/utils.sh"                      # Utility helpers
 
-# Check for the function name argument - ensure at least one argument provided
-if [[ $# -eq 0 ]]; then
-    # No arguments provided - display usage error
-    message_error "Usage: $0 <function_name> [arguments]"  # Display usage error message
-    exit 1  # Exit with error code
-fi
 
-# Construct the path to the potential source file for the requested function
-# Pattern: sources/<function_name> (no file extension)
-source_path="${workdir}/sources/${1}"
+# =============================================================================
+# FUNCTION: main
+#
+# Main command routing logic for the yarsin dispatcher.
+#
+# Description:
+#   Processes command-line arguments and routes to the appropriate subcommand
+#   or the default command. Implements the argument processing logic documented
+#   at the top of the script.
+#
+# Routing Behavior:
+#   1. If no arguments: show help and exit with error
+#   2. If --help or -h flag: show help and exit successfully
+#   3. If first argument matches an executable file in commands/:
+#      - Treat it as explicit subcommand
+#      - Remove subcommand name from argument list
+#      - Pass remaining arguments to the subcommand
+#   4. Otherwise (first arg is NOT a known subcommand):
+#      - Pass ALL original arguments to default subcommand
+#      - Default subcommand receives the original first argument as its first parameter
+#
+# Globals:
+#   YARSIN_COMMANDS_PATH    - Path to the commands directory
+#   DEFAULT_SUBCOMMAND      - Name of the default subcommand
+#
+# Arguments:
+#   $@ - All command-line arguments passed to the script
+#
+# Returns:
+#   0  Command executed successfully
+#   1  Error or help displayed (no valid command executed)
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # No Arguments Handler
+    # -------------------------------------------------------------------------
+    # When no arguments are provided, display help and exit with error status
+    # to indicate incorrect usage.
+    # -------------------------------------------------------------------------
+    if [[ $# -eq 0 ]]; then
+        show_help
+        return 1
+    fi
 
-# Check if a custom source file exists for the requested function
-if [ -f "${source_path}" ]; then
-    # Custom source file exists - treat as function call
+    local first_arg="$1"
 
-    # Remove the function name from arguments list
+    # -------------------------------------------------------------------------
+    # Help Flag Handler
+    # -------------------------------------------------------------------------
+    # If the first argument is a help flag, display the main help and exit
+    # successfully regardless of other arguments.
+    # -------------------------------------------------------------------------
+    if [[ "${first_arg}" == "--help" || "${first_arg}" == "-h" ]]; then
+        show_help
+        return 0
+    fi
+
+    # -------------------------------------------------------------------------
+    # Command Routing
+    # -------------------------------------------------------------------------
+    # Routes the command based on whether the first argument matches an
+    # existing subcommand or falls back to the default command.
+    # -------------------------------------------------------------------------
+    if [[ -f "${YARSIN_COMMANDS_PATH}/${first_arg}" ]]; then
+        # Explicit subcommand: remove it from arguments and execute
+        shift
+        _execute_subcommand "${first_arg}" "$@"
+        return $?
+    elif [[ -f "${YARSIN_COMMANDS_PATH}/${DEFAULT_SUBCOMMAND}" ]]; then
+        # Default subcommand: pass all original arguments
+        _execute_subcommand "${DEFAULT_SUBCOMMAND}" "$@"
+        return $?
+    else
+        # No valid command found
+        alenaal_error "No valid command found and default command '${DEFAULT_SUBCOMMAND}' is not available."
+        alenaal_suggestion "Use 'yarsin --help' to see available subcommands."
+        return 1
+    fi
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays the main help message for the yarsin command dispatcher.
+#
+# Description:
+#   Shows general usage, available subcommands, and instructions for getting
+#   detailed help on each subcommand. Lists executable files in the commands/
+#   directory as available subcommands, excluding files whose names start with
+#   "_" (typically internal/helper scripts). Also displays help for the default
+#   command if available.
+#
+# Globals:
+#   WORKDIR                 - The directory where the script is located
+#   YARSIN_COMMANDS_PATH    - Path to the commands directory
+#   DEFAULT_SUBCOMMAND      - Name of the default subcommand
+#
+# Outputs:
+#   Prints formatted help text to stdout using alenaal formatting functions.
+#
+# Returns:
+#   0  Help displayed successfully
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "YARSIN COMMAND DISPATCHER" --header --guide
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "Intelligent command dispatcher that routes to appropriate handlers." --item
+    alenaal_format "Supports both explicit subcommands and default command fallback." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "USAGE:" --section --usage
+    alenaal_format "yarsin <subcommand> [options...] [arguments...]" --item
+    alenaal_format "yarsin [arguments...] (runs default: ${DEFAULT_SUBCOMMAND})" --item --newline
+
+    # -------------------------------------------------------------------------
+    # How It Works Section
+    # -------------------------------------------------------------------------
+    alenaal_format "HOW IT WORKS:" --section --info
+    alenaal_format "1. If first argument matches a subcommand, it's executed with remaining arguments." --item
+    alenaal_format "2. Otherwise, all arguments are passed to the default subcommand." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Available Subcommands Section
+    # -------------------------------------------------------------------------
+    alenaal_format "AVAILABLE SUBCOMMANDS:" --section --subcommand
+
+    declare -A categories
+    declare -A cmd_info
+
+    # Collect and categorize all available commands
+    for cmd_path in "${YARSIN_COMMANDS_PATH}"/*; do
+        if [[ -f "${cmd_path}" && "${cmd_path##*/}" != _* ]]; then
+            local cmd_name=$(basename "${cmd_path}")
+            local desc=$(_get_metadata_field_safe "${cmd_name}" "description")
+            local category=$(_get_metadata_field_safe "${cmd_name}" "category")
+            category="${category:-Uncategorized}"
+            
+            # Capitalize first letter of category
+            category="$(tr '[:lower:]' '[:upper:]' <<< ${category:0:1})${category:1}"
+            
+            if [[ -z "${categories[$category]}" ]]; then
+                categories[$category]=""
+            fi
+            categories[$category]+="${cmd_name}|${desc}"$'\n'
+        fi
+    done
+
+    # Display commands grouped by category
+    if [[ ${#categories[@]} -eq 0 ]]; then
+        alenaal_format "No subcommands installed." --item --warning
+    else
+        # Sort categories for consistent display
+        mapfile -t sorted_categories < <(printf "%s\n" "${!categories[@]}" | sort)
+        
+        for category in "${sorted_categories[@]}"; do
+            alenaal_format "${category}:" --subsection --italic
+            
+            # Sort commands within category
+            mapfile -t commands_list < <(printf "%s" "${categories[$category]}" | grep -v '^$' | sort)
+            
+            for cmd_line in "${commands_list[@]}"; do
+                IFS='|' read -r cmd_name desc <<< "$cmd_line"
+                
+                # Format command name with default indicator if applicable
+                if [[ "$cmd_name" == "${DEFAULT_SUBCOMMAND}" ]]; then
+                    # For default command: use list-bold which adds ★ and a space
+                    alenaal_format "${cmd_name} (default)" --item --list-bold --indent 4 --bold
+                else
+                    # For regular commands: use list which adds ☆ and a space
+                    alenaal_format "${cmd_name}" --item --list --indent 4 --bold
+                fi
+                
+                # Display description if available
+                if [[ -n "$desc" && "$desc" != "null" ]]; then
+                    # Indent description to align with command text (after the icon and space)
+                    alenaal_format "${desc}" --indent 5 --italic
+                fi
+            done
+            
+            alenaal_newline
+        done
+    fi
+
+    # -------------------------------------------------------------------------
+    # Quick Help Section
+    # -------------------------------------------------------------------------
+    alenaal_format "QUICK HELP:" --section --tip
+    alenaal_format "yarsin <subcommand> --help" --item
+    alenaal_format "yarsin --help" --item --newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# FUNCTION: _execute_subcommand
+#
+# Executes a subcommand by sourcing its file and calling its main function.
+#
+# Description:
+#   Sources the subcommand file in a subshell to isolate its environment,
+#   verifies that it has a main function, and executes it with the provided
+#   arguments. Returns the exit code from the subcommand.
+#
+# Arguments:
+#   $1 - cmd_name: Name of the subcommand to execute
+#   $@ - Arguments to pass to the subcommand's main function
+#
+# Returns:
+#   Exit code from the subcommand's main function, or:
+#   1 if command file not found
+#   2 if command file cannot be sourced
+#   3 if command has no main function
+# -----------------------------------------------------------------------------
+_execute_subcommand() {
+    local cmd_name="$1"
+    local cmd_path="${YARSIN_COMMANDS_PATH}/${cmd_name}"
     shift
 
-    # Source the file (executes its content) with remaining arguments
-    # This allows function files to access their own $1, $2, etc.
-    source "${source_path}" "$@"
-
-else
-    # No custom source file found - try as Django command
-
-    # Check if manage.py exists in WORK_DIRECTORY (or current directory)
-    if [ -f "${WORK_DIRECTORY}/manage.py" ]; then
-        # Django project detected - execute command via django-admin
-
-        # Execute the django-admin command with all arguments
-        # $@ expands to all original arguments including the command name
-        django-admin "$@"
-
-        # Check if django-admin command failed
-        if [ ! $? -eq 0 ]; then
-            # Command failed - provide helpful error message with version-specific docs
-
-            # Get Django version for documentation link (assuming get_django_version is defined)
-            ver="$(get_django_version)"
-
-            # Display error with link to appropriate Django documentation
-            message_error "An error occurred. For guidance, please refer to the django-admin documentation: https://docs.djangoproject.com/en/${ver}/ref/django-admin/"
-
-            exit 1  # Exit with error code
-        fi
-        # If django-admin succeeded, script exits with its exit code (implicit)
-
-    else
-        # No manage.py found and no custom function - cannot proceed
-        message_error "'manage.py' was not found. To create a new project, use the 'yarsin startproject' command."
-        exit 1  # Exit with error code
+    if [[ ! -f "$cmd_path" ]]; then
+        alenaal_error "Command not found: $cmd_name"
+        return 1
     fi
-fi
+
+    # Use a subshell to isolate environment
+    (
+        # Source the command file
+        if ! source "$cmd_path" 2>/dev/null; then
+            alenaal_error "Failed to load command: $cmd_name"
+            exit 2
+        fi
+
+        # Verify the command has a main function
+        if ! declare -F main >/dev/null 2>&1; then
+            alenaal_error "Command '$cmd_name' has no main function"
+            exit 3
+        fi
+
+        # Execute the command's main function with provided arguments
+        main "$@"
+        exit $?
+    )
+
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: _execute_subcommand_silent
+#
+# Executes a subcommand silently, capturing its output.
+#
+# Description:
+#   Internal helper function that executes a subcommand and captures both
+#   stdout and stderr. Used for gathering help text without polluting the
+#   main output.
+#
+# Arguments:
+#   $1 - cmd_name: Name of the subcommand to execute
+#   $@ - Arguments to pass to the subcommand
+#
+# Returns:
+#   Prints the combined stdout/stderr of the subcommand
+#   Returns the exit code of the subcommand
+# -----------------------------------------------------------------------------
+_execute_subcommand_silent() {
+    local cmd_name="$1"
+    local cmd_path="${YARSIN_COMMANDS_PATH}/${cmd_name}"
+    shift
+
+    if [[ ! -f "$cmd_path" ]]; then
+        return 1
+    fi
+
+    (
+        if ! source "$cmd_path" 2>/dev/null; then
+            exit 2
+        fi
+
+        if ! declare -F main >/dev/null 2>&1; then
+            exit 3
+        fi
+
+        # Capture both stdout and stderr
+        main "$@" 2>&1
+        exit $?
+    )
+
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: _get_metadata_field_safe
+#
+# Safely retrieves a metadata field from a subcommand without error output.
+#
+# Description:
+#   Internal helper function that attempts to get a metadata field from a
+#   subcommand. Returns empty string on failure instead of error messages.
+#   Used primarily for building help displays.
+#
+# Arguments:
+#   $1 - cmd_name: Name of the subcommand
+#   $2 - field: Name of the metadata field to retrieve
+#
+# Returns:
+#   Prints the metadata field value or empty string if not available
+# -----------------------------------------------------------------------------
+_get_metadata_field_safe() {
+    local cmd_name="$1"
+    local field="$2"
+    local cmd_path="${YARSIN_COMMANDS_PATH}/${cmd_name}"
+
+    if [[ ! -f "${cmd_path}" ]]; then
+        echo ""
+        return 1
+    fi
+
+    # Use a subshell to avoid pollution
+    (
+        if ! source "$cmd_path" 2>/dev/null; then
+            exit 1
+        fi
+
+        if ! declare -F metadata_value >/dev/null 2>&1; then
+            exit 1
+        fi
+
+        metadata_value "$field" 2>/dev/null
+        exit $?
+    ) 2>/dev/null || echo ""
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: _get_metadata_field
+#
+# Retrieves a specific metadata field from a subcommand.
+#
+# Description:
+#   Sources the subcommand file in a subshell and calls its metadata_value
+#   function to retrieve a specific field. Used for gathering information
+#   about commands without executing their main logic.
+#
+# Arguments:
+#   $1 - cmd_name: Name of the subcommand
+#   $2 - field: Name of the metadata field to retrieve
+#
+# Returns:
+#   Prints the metadata field value to stdout
+#   Returns 1 if command file not found or metadata function missing
+# -----------------------------------------------------------------------------
+_get_metadata_field() {
+    local cmd_name="$1"
+    local field="$2"
+    local cmd_path="${YARSIN_COMMANDS_PATH}/${cmd_name}"
+
+    if [[ ! -f "${cmd_path}" ]]; then
+        alenaal_error "Command not found: $cmd_name"
+        return 1
+    fi
+
+    (
+        if ! source "$cmd_path" 2>/dev/null; then
+            alenaal_error "Failed to load command: $cmd_name"
+            exit 1
+        fi
+
+        if ! declare -F metadata_value >/dev/null 2>&1; then
+            alenaal_error "Command '$cmd_name' has no metadata_value function"
+            exit 1
+        fi
+
+        metadata_value "$field"
+        exit $?
+    )
+
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# FUNCTION: _get_metadata
+#
+# Retrieves all metadata from a subcommand.
+#
+# Description:
+#   Sources the subcommand file in a subshell and calls its metadata
+#   function to retrieve all metadata as key-value pairs. Used for
+#   comprehensive command information gathering.
+#
+# Arguments:
+#   $1 - cmd_name: Name of the subcommand
+#
+# Returns:
+#   Prints all metadata as key=value pairs to stdout
+#   Returns 1 if command file not found or metadata function missing
+# -----------------------------------------------------------------------------
+_get_metadata() {
+    local cmd_name="$1"
+    local cmd_path="${YARSIN_COMMANDS_PATH}/${cmd_name}"
+
+    if [[ ! -f "$cmd_path" ]]; then
+        alenaal_error "Command not found: $cmd_name"
+        return 1
+    fi
+
+    (
+        if ! source "$cmd_path" 2>/dev/null; then
+            alenaal_error "Failed to load command: $cmd_name"
+            exit 1
+        fi
+
+        if ! declare -F metadata >/dev/null 2>&1; then
+            alenaal_error "Command '$cmd_name' has no metadata function"
+            exit 1
+        fi
+
+        metadata
+        exit $?
+    )
+
+    return $?
+}
+
+
+# Set flag to indicate we're inside yarsin
+__YARSIN__=true
+
+
+# =============================================================================
+# SCRIPT ENTRY POINT
+# =============================================================================
+main "$@"

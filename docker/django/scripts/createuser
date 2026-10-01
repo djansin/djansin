@@ -1,101 +1,580 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: createuser
+# Description: System user creation utility with automatic UID allocation
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
 
 # -----------------------------------------------------------------------------
-# Script: createuser
-# Description: Creates a system user with specified UID/GID or uses defaults
-# Usage: ./createuser -u <UID> [-g <GID>] [-n <username>]
+# Path Resolution
+# -----------------------------------------------------------------------------
+# Determines script directory and canonical project paths for consistent
+# file location regardless of how the script is invoked.
+# -----------------------------------------------------------------------------
+WORKDIR=$(cd $(dirname "$0") && pwd)                # Script's directory
+PROJECT_PATH=$(realpath "$WORKDIR")                 # Resolve symlinks to absolute path
+YARSIN_LIB_PATH="${PROJECT_PATH}/yarsin-libs"
+
+YARSIN_CORE_PATH="${YARSIN_LIB_PATH}/core"
+
+# -----------------------------------------------------------------------------
+# Core Library Loading
+# -----------------------------------------------------------------------------
+# Loads shared functionality libraries that provide common utilities,
+# formatted output, and constants used throughout the dispatcher.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/constants.sh"                  # Constants and configuration
+source "${YARSIN_CORE_PATH}/alenaal.sh"                    # Formatted output functions
+source "${YARSIN_CORE_PATH}/utils.sh"                      # Utility helpers
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+
+# -----------------------------------------------------------------------------
+# User Configuration
+# -----------------------------------------------------------------------------
+# These variables define default user settings.
+# They can be overridden by environment variables.
+# -----------------------------------------------------------------------------
+
+# Minimum UID for regular users (system users typically use lower IDs)
+: "${MIN_UID:=1000}"
+
+# Maximum UID (standard limit for regular users)
+: "${MAX_UID:=60000}"
+
+# Default shell for new users
+: "${DEFAULT_SHELL:=/bin/bash}"
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the createuser command.
+#
+# Description:
+#   Creates a system user with automatic UID allocation. Only username is
+#   required; UID and GID are automatically assigned from the available range.
+#   The script ensures user consistency, validates inputs, and handles
+#   existing users gracefully.
+#
+# Arguments:
+#   $1 - username: Username for the new user (required)
+#
 # Options:
-#   -u  User ID (UID) - required
-#   -g  Group ID (GID) - optional, defaults to UID if not provided
-#   -n  Username - optional, defaults to value from _constants.sh
-# Returns: Creates user account or exits with error if user exists with different UID
-# Dependencies: Requires sourced files: _constants.sh, _messages.sh, _utils.sh
+#   -g, --gid GID         Numeric group ID (defaults to allocated UID)
+#   -s, --shell SHELL     Login shell (default: /bin/bash)
+#   -h, --help           Display this help message
+#
+# Environment Variables:
+#   MIN_UID       Minimum UID for regular users (default: 1000)
+#   MAX_UID       Maximum UID for regular users (default: 60000)
+#   DEFAULT_SHELL Default shell (default: /bin/bash)
+#
+# Returns:
+#   0 - User created successfully
+#   1 - Invalid arguments or validation failed
+#   2 - User creation failed
 # -----------------------------------------------------------------------------
+main() {
+    local username=""
+    local uid=""
+    local gid=""
+    local shell="${DEFAULT_SHELL}"
 
-# Get the directory where the script is located
-workdir="$(cd "$(dirname "$0")" && pwd)"  # Navigate to script's directory and get absolute path
-
-# Get the project directory (same as workdir in this case, but allows for future flexibility)
-project_dir=$(realpath "$workdir")         # Resolve any symlinks to get canonical path
-
-# Source necessary library files for shared functionality
-source "${workdir}/sources/_constants.sh"  # Contains constant values like default USERNAME
-source "${workdir}/sources/_messages.sh"   # Contains message functions (message_error, etc.)
-source "${workdir}/sources/_utils.sh"      # Contains utility helper functions
-
-# -----------------------------------------------------------------------------
-# Function: createuser
-# Description: Main function to create a system user with specified parameters
-#              Validates input, checks for existing users, and creates account if needed
-# -----------------------------------------------------------------------------
-createuser() {
-    # Initialize local variables with empty values
-    local username=""   # Username for the new account
-    local uid=""        # User ID (numeric)
-    local gid=""        # Group ID (numeric)
-
-    # Process command-line options using getopts
-    # Options: -n for username, -u for UID, -g for GID
-    while getopts "n:u:g:" opt; do
-        case ${opt} in
-            n) 
-                username=${OPTARG}  # Capture username from -n argument
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                return 0
                 ;;
-            u) 
-                uid=${OPTARG}       # Capture UID from -u argument (required)
+            
+            -i|--uid)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "UID cannot be empty"
+                    return 1
+                fi
+                uid="$2"
+                shift 2
                 ;;
-            g) 
-                gid=${OPTARG}       # Capture GID from -g argument (optional)
+            
+            -n|--username)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Username cannot be empty"
+                    return 1
+                fi
+                username="$2"
+                shift 2
                 ;;
+
+            -g|--gid)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--gid' requires an argument"
+                    return 1
+                fi
+                if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+                    alenaal_error "GID must be a positive integer: $2"
+                    return 1
+                fi
+                gid="$2"
+                shift 2
+                ;;
+
+            -s|--shell)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--shell' requires an argument"
+                    return 1
+                fi
+                if [[ ! -x "$2" ]] && [[ "$2" != "/bin/false" ]] && [[ "$2" != "/usr/sbin/nologin" ]]; then
+                    alenaal_warning "Shell '$2' may not be executable"
+                fi
+                shell="$2"
+                shift 2
+                ;;
+                
+            --)
+                shift
+                if [[ -z "$username" && -n "$1" ]]; then
+                    username="$1"
+                fi
+                break
+                ;;
+
+            -*)
+                alenaal_error "Unknown option: $1"
+                alenaal_suggestion "Use 'yarsin createuser --help' for usage information"
+                return 1
+                ;;
+
             *)
-                # Handle invalid options
-                message_error "Invalid option: ${opt}"
-                exit 1               # Exit with error code
+                if [[ -z "$username" ]]; then
+                    username="$1"
+                else
+                    alenaal_error "Unexpected argument: $1"
+                    return 1
+                fi
+                shift
                 ;;
         esac
     done
 
-    # Shift processed options away, leaving any remaining arguments
-    shift $((OPTIND - 1))
-
-    # Validate that required UID argument was provided
-    if [[ -z "$uid" ]]; then
-        message_error "Usage: $0 -u <UID>"
-        exit 1  # Exit with error if UID not provided
-    fi
-
-    # If GID not provided, default to same value as UID
-    # This follows common Unix convention where user gets a personal group with same ID
-    if [[ -z "$gid" ]]; then
-        gid=$uid
-    fi
-
-    # If username not provided, use default from constants file
-    # Assumes USERNAME is defined in sourced _constants.sh
+    # -------------------------------------------------------------------------
+    # Validate Username
+    # -------------------------------------------------------------------------
     if [[ -z "$username" ]]; then
-        username=${USERNAME}
+        alenaal_error "Username is required"
+        alenaal_suggestion "Usage: yarsin createuser <username>"
+        return 1
     fi
 
-    # Check if user already exists in the system
-    # Redirect stderr to suppress "no such user" messages
-    if id "$username" &>/dev/null; then
-        # User exists - verify the existing UID matches requested UID
-        if [ "$(id -u $username)" != "$uid" ]; then
-            message_error "User $username exists."
-            exit 1  # Exit if existing user has different UID (prevents ID conflict)
+    if ! _validate_username "$username"; then
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Check Root Privileges
+    # -------------------------------------------------------------------------
+    if [[ $EUID -ne 0 ]]; then
+        alenaal_error "This command must be run as root"
+        alenaal_suggestion "Use sudo or run as root user"
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Check if User Already Exists
+    # -------------------------------------------------------------------------
+    if _user_exists "$username"; then
+        local existing_uid=$(id -u "$username" 2>/dev/null)
+        alenaal_warning "User '$username' already exists with UID: $existing_uid"
+        alenaal_info "No changes made"
+        _show_user_info "$username"
+        return 0
+    fi
+
+    # -------------------------------------------------------------------------
+    # Allocate UID
+    # -------------------------------------------------------------------------
+    if [[ -z $uid ]]; then
+        uid=$(_get_next_available_uid)
+        alenaal_warning "Allocated UID: $uid for user '$username'"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Set GID
+    # -------------------------------------------------------------------------
+    if [[ -z "$gid" ]]; then
+        gid="$uid"
+        alenaal_warning "GID not specified, defaulting to allocated UID: $gid"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Create User
+    # -------------------------------------------------------------------------
+    alenaal_info "Creating user '$username' with UID: $uid, GID: $gid, Shell: $shell"
+
+    # Check if group exists, create if needed
+    if ! _group_exists "$gid" && ! _group_name_exists "$username"; then
+        alenaal_info "Creating group '$username' with GID: $gid" --indent 2
+        if ! groupadd -g "$gid" "$username" 2>/dev/null; then
+            alenaal_error "Failed to create group '$username' with GID $gid"
+            return 2
         fi
-        # If UID matches, function completes silently (user already exists as requested)
+        alenaal_success "Group created successfully" --indent 2
+    elif _group_exists "$gid"; then
+        local existing_group
+        existing_group=$(getent group "$gid" | cut -d: -f1)
+        alenaal_note "Using existing group '$existing_group' with GID $gid"
+    elif _group_name_exists "$username"; then
+        alenaal_warning "Group name '$username' already exists with different GID"
+        alenaal_suggestion "Use --gid to specify the correct GID"
+        return 1
+    fi
+
+    # Create the user account
+    if useradd -u "$uid" -g "$gid" \
+               --password '!!' \
+               --no-create-home \
+               --shell "$shell" \
+               --comment "Created by yarsin createuser" \
+               "$username" 2>/dev/null; then
+        alenaal_success "User created successfully"
+        _show_user_info "$username"
+        return 0
     else
-        # User doesn't exist - create new user account with specified parameters
-        adduser -u $uid -G $gid --disabled-password $username
-        # Options explained:
-        # -u $uid    : Set user ID
-        # -G $gid    : Add user to group with this GID (creates group if needed)
-        # --disabled-password : Create user without password (cannot login directly)
-        # $username  : Username for new account
+        alenaal_error "Failed to create user '$username'"
+        return 2
     fi
 }
 
-# Execute the main function with all command-line arguments
-# This allows the script to be called directly: ./createuser -u 1001
-createuser "$@"
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the createuser command.
+#
+# Provides detailed information about user creation with automatic UID
+# allocation, validation rules, and usage examples.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "createuser - System User Creation Utility" --header --icon "👤"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Creates system users with automatic UID allocation from the available range." --item
+    alenaal_format "Only username is required; UID is automatically assigned." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin createuser appuser" --item --icon "⇢"
+    alenaal_format "yarsin createuser www-data --gid 33" --item --icon "⇢"
+    alenaal_format "yarsin createuser nobody --shell /usr/sbin/nologin" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Arguments Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Arguments:" --section --info
+    alenaal_format "username" --item --list --bold
+    alenaal_format "Username for the new user (required)" --indent 4
+    alenaal_format "Must start with lowercase letter or underscore" --indent 4 --italic
+    alenaal_format "Can contain lowercase letters, numbers, hyphens, underscores" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+
+    alenaal_format  --item --list --bold -- "-g, --gid GID"
+    alenaal_format "Numeric group ID (defaults to allocated UID)" --indent 4
+    alenaal_format "If specified, must be a positive integer" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-s, --shell SHELL"
+    alenaal_format "Login shell (default: ${DEFAULT_SHELL})" --indent 4
+    alenaal_format "Common options: /bin/bash, /bin/sh, /usr/sbin/nologin" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # UID Allocation Section
+    # -------------------------------------------------------------------------
+    alenaal_format "UID Allocation:" --section --info
+    alenaal_format "The system automatically assigns UIDs using these rules:" --item
+
+    alenaal_format "1. Starts from ${MIN_UID} (minimum regular user UID)" --item --list --indent 4
+    alenaal_format "2. Finds the first available UID in the range ${MIN_UID}-${MAX_UID}" --item --list --indent 4
+    alenaal_format "3. Skips UIDs already in use by existing users" --item --list --indent 4
+    alenaal_format "4. Allocates the lowest available UID" --item --list --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "MIN_UID" --item --list --bold
+    alenaal_format "Minimum UID for regular users (default: 1000)" --indent 4
+
+    alenaal_format "MAX_UID" --item --list --bold
+    alenaal_format "Maximum UID for regular users (default: 60000)" --indent 4
+
+    alenaal_format "DEFAULT_SHELL" --item --list --bold
+    alenaal_format "Default login shell (default: /bin/bash)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Validation Rules Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Validation Rules:" --section --info
+
+    alenaal_format "Username:" --subsection --bold
+    alenaal_format "• Must start with lowercase letter or underscore" --item --list --indent 4
+    alenaal_format "• Can contain lowercase letters, numbers, hyphens, underscores" --item --list --indent 4
+    alenaal_format "• Maximum length: 32 characters" --item --list --indent 4
+    alenaal_format "• Cannot be 'root' or other reserved system names" --item --list --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Basic user creation" --subsection --italic
+    alenaal_format "yarsin createuser appuser" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates user 'appuser' with next available UID (e.g., 1000, 1001, etc.)" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Create with specific GID" --subsection --italic
+    alenaal_format "yarsin createuser datauser --gid 2000" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates user with auto-allocated UID but places in existing group GID 2000" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Create system user with nologin shell" --subsection --italic
+    alenaal_format "yarsin createuser nginx --shell /usr/sbin/nologin" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates service user that cannot login interactively" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Bulk user creation" --subsection --italic
+    alenaal_format "for user in app{1..5}; do yarsin createuser \$user; done" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates users app1, app2, app3, app4, app5 with sequential UIDs" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Dockerfile integration" --subsection --italic
+    alenaal_format "RUN yarsin createuser appuser && \\" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "chown -R appuser:appuser /app" --item --icon "⇢" --indent 5 --bold
+    alenaal_format "USER appuser" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates and switches to application user with consistent UID" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Check available UIDs" --subsection --italic
+    alenaal_format "yarsin createuser testuser --gid 9999" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "If GID 9999 doesn't exist, you'll see a warning before creation" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Root privileges (must run as root or with sudo)" --item --list
+    alenaal_format "useradd and groupadd commands available" --item --list
+    alenaal_format "Available UID in range ${MIN_UID}-${MAX_UID}" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0  - User created successfully or already exists" --item --list
+    alenaal_format "1  - Invalid arguments or validation failed" --item --list
+    alenaal_format "2  - User creation failed (group creation failed, no available UIDs, etc.)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for user creation and validation.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _validate_username
+#
+# Validates username format and conventions.
+#
+# Args:
+#   $1 - username: Username to validate
+#
+# Returns:
+#   0 if valid, 1 if invalid
+# -----------------------------------------------------------------------------
+_validate_username() {
+    local username="$1"
+
+    # Check length
+    if [[ ${#username} -gt 32 ]]; then
+        alenaal_error "Username too long (max 32 characters): $username"
+        return 1
+    fi
+
+    # Check format: start with lowercase letter or underscore, then alphanumeric/hyphen/underscore
+    if [[ ! "$username" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+        alenaal_error "Invalid username format: $username"
+        alenaal_format "Username must:" --indent 2
+        alenaal_format "• Start with lowercase letter or underscore" --indent 3
+        alenaal_format "• Contain only lowercase letters, numbers, hyphens, or underscores" --indent 3
+        return 1
+    fi
+
+    # Check for reserved names
+    local reserved_names=("root" "daemon" "bin" "sys" "sync" "games" "man" "lp" "mail" "news" "uucp" "proxy" "www-data" "backup" "list" "irc" "gnats" "nobody" "systemd" "syslog" "messagebus" "_apt" "sshd")
+    
+    for reserved in "${reserved_names[@]}"; do
+        if [[ "$username" == "$reserved" ]]; then
+            alenaal_warning "Username '$username' is a reserved system name"
+            alenaal_suggestion "Use a different username to avoid conflicts"
+            # Warning only, not fatal
+        fi
+    done
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _get_next_available_uid
+#
+# Finds the next available UID in the range MIN_UID to MAX_UID.
+#
+# Description:
+#   Scans UIDs starting from MIN_UID upward until finding one that is not
+#   in use by any existing user. Returns the first available UID.
+#
+# Returns:
+#   Prints the next available UID
+#   Returns 1 if no UIDs available in range
+# -----------------------------------------------------------------------------
+_get_next_available_uid() {
+    local uid=$MIN_UID
+    
+    while [[ $uid -le $MAX_UID ]]; do
+        if ! id "$uid" &>/dev/null; then
+            echo "$uid"
+            return 0
+        fi
+        ((uid++))
+    done
+
+    alenaal_error "No available UIDs in range ${MIN_UID}-${MAX_UID}"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Function: _user_exists
+#
+# Checks if a user exists by username.
+#
+# Args:
+#   $1 - username: Username to check
+#
+# Returns:
+#   0 if user exists, 1 otherwise
+# -----------------------------------------------------------------------------
+_user_exists() {
+    local username="$1"
+    id "$username" &>/dev/null
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _group_exists
+#
+# Checks if a group exists by GID.
+#
+# Args:
+#   $1 - gid: GID to check
+#
+# Returns:
+#   0 if group exists, 1 otherwise
+# -----------------------------------------------------------------------------
+_group_exists() {
+    local gid="$1"
+    getent group "$gid" &>/dev/null
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _group_name_exists
+#
+# Checks if a group exists by name.
+#
+# Args:
+#   $1 - groupname: Group name to check
+#
+# Returns:
+#   0 if group exists, 1 otherwise
+# -----------------------------------------------------------------------------
+_group_name_exists() {
+    local groupname="$1"
+    getent group "$groupname" &>/dev/null
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _show_user_info
+#
+# Displays information about the created user.
+#
+# Args:
+#   $1 - username: Username
+# -----------------------------------------------------------------------------
+_show_user_info() {
+    local username="$1"
+
+    alenaal_newline
+    alenaal_format "User Information:" --indent 2 --color cyan --bold
+    
+    local uid gid home shell
+    uid=$(id -u "$username" 2>/dev/null)
+    gid=$(id -g "$username" 2>/dev/null)
+    shell=$(getent passwd "$username" | cut -d: -f7)
+    
+    alenaal_format "Username:  $username" --item
+    alenaal_format "UID:       $uid" --item
+    alenaal_format "GID:       $gid" --item
+    alenaal_format "Shell:     $shell" --item
+    alenaal_newline
+}
+
+
+# =============================================================================
+# SCRIPT ENTRY POINT
+# =============================================================================
+main "$@"

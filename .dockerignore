@@ -1,20 +1,72 @@
-# Ignore common version control folders
+# ============================================
+# DOCKER IGNORE CONFIGURATION
+# ============================================
+
+# ────────────────────────────────────────────
+# 1. VERSION CONTROL SYSTEMS
+#    (Prevents inclusion of repository metadata)
+# ────────────────────────────────────────────
 .git
 .svn
 .vagrant
+
+# ────────────────────────────────────────────
+# 2. IDE & EDITOR CONFIGURATIONS
+#    (Development environment-specific files)
+# ────────────────────────────────────────────
 .idea
 .vscode
 .devcontainer
+*.swp
+*.swo
 
-# Ignore Python cache and temporary files
+# ────────────────────────────────────────────
+# 3. PYTHON-SPECIFIC IGNORES
+# ────────────────────────────────────────────
+# 3.1 Compiled bytecode and cache
 __pycache__
 *.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
 
-# Ignore development and local environment files
+# 3.2 Virtual environments
+.env
+.venv
+venv/
+env/
+
+# ────────────────────────────────────────────
+# 4. ENVIRONMENT & CONFIGURATION FILES
+#    (Sensitive/local configuration)
+# ────────────────────────────────────────────
 *.env
 *.log
-*.sql
 
-# Ignore system and hidden files
-.DS_Store
-Thumbs.db
+# ────────────────────────────────────────────
+# 5. DATABASE & DEVELOPMENT FILES
+# ────────────────────────────────────────────
+*.sql
+*.sqlite3
+
+# ────────────────────────────────────────────
+# 6. TESTING & COVERAGE REPORTS
+# ────────────────────────────────────────────
+.coverage
+htmlcov/
+
+# ────────────────────────────────────────────
+# 7. OPERATING SYSTEM ARTIFACTS
+#    (Platform-specific hidden files)
+# ────────────────────────────────────────────
+.DS_Store          # macOS Finder
+Thumbs.db          # Windows thumbnail cache
+
+# ============================================
+# BEST PRACTICE NOTES:
+# 1. Add project-specific build outputs here
+# 2. Exclude sensitive credentials (*.secret, *.key)
+# 3. Consider excluding large media/assets if not needed
+# ============================================

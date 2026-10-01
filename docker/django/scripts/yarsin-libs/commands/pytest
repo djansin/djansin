@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: pytest
+# Description: pytest test runner wrapper with Django integration
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="pytest"
+    [category]="testing"
+    [description]="pytest test runner wrapper with Django integration"
+    [usage]="yarsin pytest [pytest_options] [test_paths]"
+    [version]="1.0.0"
+    [requires]="python pytest pytest-django"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the pytest command.
+#
+# Description:
+#   Wrapper around pytest that adds Django integration and sensible defaults.
+#   Automatically configures Django settings module and provides common
+#   testing patterns for Django applications.
+#
+# Arguments:
+#   $@ - All arguments are passed directly to pytest
+#
+# Environment Variables:
+#   DJANGO_SETTINGS_MODULE  Django settings module for tests
+#   PYTEST_ADDOPTS          Additional pytest options
+#   TEST_ENVIRONMENT        Test environment (development, ci, production)
+#
+# Returns:
+#   Exit code from pytest command
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Execute pytest
+    # -------------------------------------------------------------------------
+    pytest "$@"
+    return $?
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

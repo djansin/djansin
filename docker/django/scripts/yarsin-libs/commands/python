@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: python
+# Description: Python interpreter wrapper with environment awareness
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="python"
+    [category]="python"
+    [description]="Python interpreter wrapper with environment awareness"
+    [usage]="yarsin python [options] script.py [arguments]"
+    [version]="1.0.0"
+    [requires]="python"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the python command.
+#
+# Description:
+#   Simple wrapper around the Python interpreter that ensures the correct
+#   Python version is used and provides a consistent interface within the
+#   yarsin ecosystem. Useful for running Python scripts, one-liners, or
+#   entering the interactive shell within the project context.
+#
+# Arguments:
+#   $@ - All arguments are passed directly to the Python interpreter
+#
+# Environment Variables:
+#   PYTHONPATH                  Additional paths for Python module resolution
+#   PYTHONUNBUFFERED            Disable output buffering (useful for logs)
+#   PYTHONDONTWRITEBYTECODE     Prevent .pyc file creation
+#
+# Returns:
+#   Exit code from the Python interpreter
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Execute Python
+    # -------------------------------------------------------------------------
+    # Pass all arguments directly to python interpreter
+    python "$@"
+    return $?
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

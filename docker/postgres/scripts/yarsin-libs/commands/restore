@@ -1,0 +1,835 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: restore
+# Description: PostgreSQL database restore utilities
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="restore"
+    [category]="database"
+    [description]="PostgreSQL database restore utilities"
+    [usage]="yarsin restore <subcommand> [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="postgresql-client"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Connection Configuration
+# -----------------------------------------------------------------------------
+# These environment variables are used by PostgreSQL client tools.
+# They can be set externally or will use these defaults.
+# -----------------------------------------------------------------------------
+
+# Set the necessary environment variables for the database connection
+export PGHOST="${POSTGRES_HOST:-localhost}"         # The host where the PostgreSQL database is running
+export PGPORT="${POSTGRES_PORT:-5432}"              # The port number for connecting to the PostgreSQL database
+export PGUSER="${POSTGRES_USER:-postgres}"          # The username for accessing the PostgreSQL database
+export PGPASSWORD="${POSTGRES_PASSWORD:-}"          # The password for the PostgreSQL database user
+export PGDATABASE="${POSTGRES_DB:-postgres}"        # The name of the default database to be used
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the restore command.
+#
+# Description:
+#   Provides PostgreSQL restore utilities with two main modes:
+#   - dbms: Full PostgreSQL data directory restore (requires filesystem access)
+#   - data: Individual database restore using psql
+#
+# Arguments:
+#   $@ - Subcommand and options
+#
+# Subcommands:
+#   dbms         Full PostgreSQL data directory restore
+#   data         Individual database restore
+#
+# Options:
+#   -h, --help   Display this help message
+#
+# Environment Variables:
+#   POSTGRES_HOST       Database host (default: localhost)
+#   POSTGRES_PORT       Database port (default: 5432)
+#   POSTGRES_USER       Database user (default: postgres)
+#   POSTGRES_PASSWORD   Database password (required)
+#   POSTGRES_DB         Default database (default: postgres)
+#   BACKUP_ROOT         Root backup directory (default: /backup)
+#   PGDATA              PostgreSQL data directory (default: /var/lib/postgresql/data)
+#
+# Returns:
+#   0 - Restore completed successfully
+#   1 - Invalid arguments
+#   2 - Restore failed
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    if [[ $# -eq 0 ]]; then
+        show_help
+        return 0
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            dbms)
+                shift
+                _restore_dbms "$@"
+                return $?
+                ;;
+
+            data)
+                shift
+                _restore_data "$@"
+                return $?
+                ;;
+
+            *)
+                alenaal_error "Invalid subcommand: '$1'"
+                alenaal_suggestion "Available subcommands: dbms, data"
+                alenaal_suggestion "Use 'yarsin restore --help' for usage information"
+                return 1
+                ;;
+        esac
+    done
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the restore command.
+#
+# Provides detailed information about PostgreSQL restore options,
+# including both full DBMS restores and individual database restores.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "restore - PostgreSQL Database Restore Utilities" --header --icon "🔄"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Provides two restore modes: full DBMS restore (data directory) and" --item
+    alenaal_format "individual database restores using psql." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin restore dbms [OPTIONS]" --item --icon "⇢"
+    alenaal_format "yarsin restore data [OPTIONS]" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Subcommands Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Subcommands:" --section --option
+
+    alenaal_format "dbms" --item --list --bold
+    alenaal_format "Full PostgreSQL data directory restore" --indent 4
+    alenaal_format "Requires filesystem access to PGDATA" --indent 4 --italic
+    alenaal_format "Restores from .tar.gz archives" --indent 4 --italic
+    alenaal_format "This will replace ALL PostgreSQL data" --indent 4 --warning
+
+    alenaal_format "data" --item --list --bold
+    alenaal_format "Individual database restore using psql" --indent 4
+    alenaal_format "Restores from .sql.gz dumps" --indent 4 --italic
+    alenaal_format "Drops and recreates the target database" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "--help, -h"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # DBMS Restore Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "DBMS Restore Options:" --section --info
+    alenaal_format "yarsin restore dbms [OPTIONS]" --item --bold
+
+    alenaal_format --item --list --bold --indent 4 -- "-n, --name NAME"
+    alenaal_format "Backup filename to restore" --indent 5
+    alenaal_format "If not provided, interactive selection" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-u, --username USER"
+    alenaal_format "PostgreSQL username (overrides POSTGRES_USER)" --indent 5
+
+    alenaal_format --item --list --bold --indent 4 -- "-p, --password PASS"
+    alenaal_format "PostgreSQL password (overrides POSTGRES_PASSWORD)" --indent 5
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Data Restore Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Data Restore Options:" --section --info
+    alenaal_format "yarsin restore data [OPTIONS]" --item --bold
+
+    alenaal_format --item --list --bold --indent 4 -- "-d, --dbname NAME"
+    alenaal_format "Target database name" --indent 5
+    alenaal_format "If not provided, extracted from backup filename or prompted" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-b, --backup NAME"
+    alenaal_format "Backup filename to restore" --indent 5
+    alenaal_format "If not provided, interactive selection" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-u, --username USER"
+    alenaal_format "PostgreSQL username (overrides POSTGRES_USER)" --indent 5
+
+    alenaal_format --item --list --bold --indent 4 -- "-p, --password PASS"
+    alenaal_format "PostgreSQL password (overrides POSTGRES_PASSWORD)" --indent 5
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "POSTGRES_HOST" --item --list --bold
+    alenaal_format "Database host (default: localhost)" --indent 4
+
+    alenaal_format "POSTGRES_PORT" --item --list --bold
+    alenaal_format "Database port (default: 5432)" --indent 4
+
+    alenaal_format "POSTGRES_USER" --item --list --bold
+    alenaal_format "Database user (default: postgres)" --indent 4
+
+    alenaal_format "POSTGRES_PASSWORD" --item --list --bold
+    alenaal_format "Database password (REQUIRED for authentication)" --indent 4
+
+    alenaal_format "POSTGRES_DB" --item --list --bold
+    alenaal_format "Default database (default: postgres)" --indent 4
+
+    alenaal_format "PGDATA" --item --list --bold
+    alenaal_format "PostgreSQL data directory (default: /var/lib/postgresql/data)" --indent 4
+    alenaal_format "Used for DBMS restores" --indent 4 --italic
+
+    alenaal_format "BACKUP_ROOT" --item --list --bold
+    alenaal_format "Root backup directory (default: /backup)" --indent 4
+    alenaal_format "Looks for backups in: \${BACKUP_ROOT}/dbms/ and \${BACKUP_ROOT}/databases/" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Interactive DBMS restore" --subsection --italic
+    alenaal_format "yarsin restore dbms" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Lists available DBMS backups and prompts for selection" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "DBMS restore with specific backup" --subsection --italic
+    alenaal_format "yarsin restore dbms --name postgresql___2024_01_15__02_30_00___full.tar.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Restore specific backup without interactive prompt" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "DBMS restore with credentials" --subsection --italic
+    alenaal_format "yarsin restore dbms --username admin --password secret --name backup.tar.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Override database credentials during restore" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Interactive data restore" --subsection --italic
+    alenaal_format "yarsin restore data" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Lists available database backups and prompts for selection" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Data restore with explicit database and backup" --subsection --italic
+    alenaal_format "yarsin restore data --dbname myapp --backup myapp___2024_01_15__03_30_00___dump.sql.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Restore specific backup to specific database" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Data restore with database extraction" --subsection --italic
+    alenaal_format "yarsin restore data --backup myapp___2024_01_15__03_30_00___dump.sql.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Extracts database name 'myapp' from backup filename" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "With explicit credentials" --subsection --italic
+    alenaal_format "yarsin restore data \ " --item --icon "⇢" --indent 4 --bold
+    alenaal_format --indent 5 --bold -- "--dbname myapp \ "
+    alenaal_format --indent 5 --bold -- "--backup myapp_dump.sql.gz \ "
+    alenaal_format --indent 5 --bold -- "--username restore_user \ "
+    alenaal_format --indent 5 --bold -- "--password restore_pass"
+    alenaal_format --indent 5 --italic -- "Restore with specific database credentials"
+    alenaal_newline
+
+    alenaal_format "Using environment variables" --subsection --italic
+    alenaal_format "export POSTGRES_HOST=db.example.com" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export POSTGRES_USER=restore_user" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export POSTGRES_PASSWORD=secret" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export BACKUP_ROOT=/mnt/backups" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin restore data --dbname myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Restore Locations Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Restore Sources:" --section --info
+    alenaal_format "DBMS backups:  ${DBMS_BACKUP_PATH}/" --item --list
+    alenaal_format "Data backups:  ${DATA_BACKUP_PATH}/" --item --list
+    alenaal_format "DBMS target:   ${POSTGRESQL_DATA}/" --item --list
+    alenaal_newline
+
+    alenaal_format "Expected filename patterns:" --subsection
+    alenaal_format "DBMS:  *___*___${DBMS_BACKUP_FILE_SUFFIX}.tar.gz" --item --indent 4 --italic
+    alenaal_format "Data:  {dbname}___*___${DATA_BACKUP_FILE_SUFFIX}.sql.gz" --item --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Warnings Section
+    # -------------------------------------------------------------------------
+    alenaal_format "IMPORTANT WARNINGS:" --section --warning
+
+    alenaal_format "DBMS Restore:" --item --list --bold
+    alenaal_format "• This will COMPLETELY REPLACE all PostgreSQL data" --indent 4
+    alenaal_format "• PostgreSQL service must be stopped during restore" --indent 4
+    alenaal_format "• Requires filesystem-level access to PGDATA" --indent 4
+    alenaal_format "• Make sure you have a current backup before proceeding" --indent 4
+
+    alenaal_format "Data Restore:" --item --list --bold
+    alenaal_format "• This will DROP and RECREATE the target database" --indent 4
+    alenaal_format "• All existing data in the database will be lost" --indent 4
+    alenaal_format "• Connections to the database will be terminated" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "PostgreSQL client tools (psql, dropdb, createdb)" --item --list
+    alenaal_format "Access to PostgreSQL server" --item --list
+    alenaal_format "Read permissions in backup directories" --item --list
+    alenaal_format "For DBMS restores: write access to PGDATA" --item --list
+    alenaal_format "PostgreSQL service stopped for DBMS restore" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0  - Restore completed successfully" --item --list
+    alenaal_format "1  - Invalid arguments or missing credentials" --item --list
+    alenaal_format "2  - Restore failed (backup not found, permission denied, etc.)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for restore operations.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _restore_dbms
+#
+# Performs full PostgreSQL data directory restore.
+#
+# Extracts a compressed tar archive to the PostgreSQL data directory.
+# WARNING: This replaces ALL PostgreSQL data.
+#
+# Args:
+#   $@ - Options: -u|--username, -p|--password, -n|--name
+#
+# Returns:
+#   0 - Restore successful
+#   1 - Invalid arguments
+#   2 - Restore failed
+# -----------------------------------------------------------------------------
+_restore_dbms() {
+    # Initialize variables
+    local username=""
+    local password=""
+    local backup_name=""
+
+    # Parse named arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -u|--username)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--username' requires an argument"
+                    return 1
+                fi
+                username="$2"
+                shift 2
+                ;;
+
+            -p|--password)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--password' requires an argument"
+                    return 1
+                fi
+                password="$2"
+                shift 2
+                ;;
+
+            -n|--name)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--name' requires an argument"
+                    return 1
+                fi
+                backup_name="$2"
+                shift 2
+                ;;
+
+            *)
+                alenaal_error "Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # Display welcome message with warning
+    alenaal_welcome "INITIATING DBMS RESTORE PROCESS"
+    alenaal_newline
+
+    # Check if required arguments are provided
+    if [[ -n "$username" && -n "$password" ]]; then
+        export PGUSER="${username}"     # Set the username for PostgreSQL
+        export PGPASSWORD="${password}" # Set the password for PostgreSQL
+    elif [[ -n "$username" || -n "$password" ]]; then
+        alenaal_error "Both username and password must be provided together"
+        return 1
+    fi
+
+    # Check if backup directory exists
+    if [[ ! -d "${DBMS_BACKUP_PATH}" ]]; then
+        alenaal_error "DBMS backup directory not found: ${DBMS_BACKUP_PATH}"
+        return 2
+    fi
+
+    # Check if required arguments are provided
+    if [[ -z "$backup_name" ]]; then
+        alenaal_format "Please select a DBMS backup from the available options below:" --indent 2 --step
+        _list_backups "${DBMS_BACKUP_PATH}" "*_${DBMS_BACKUP_FILE_SUFFIX}.tar.gz"
+        alenaal_ask "Enter the name of the DBMS backup you wish to restore: " --indent 3
+        read -r backup_name
+
+        if [[ -z "$backup_name" ]]; then
+            alenaal_error "No backup name provided"
+            return 1
+        fi
+    fi
+
+    alenaal_alarm "This will COMPLETELY REPLACE all PostgreSQL data!" --indent 4
+    alenaal_alarm "Make sure PostgreSQL service is stopped before continuing." --indent 4
+    alenaal_alarm "Are you sure you want to continue? (yes/no): " --indent 4 --inline
+    read -r confirmation
+
+    if [[ "$confirmation" != "yes" ]]; then
+        alenaal_cancel "Restore cancelled by user"
+        return 0
+    fi
+
+    alenaal_newline
+
+    # Construct the full path of the backup file
+    local backup_path="${DBMS_BACKUP_PATH}/${backup_name}"
+
+    # Check if the backup file exists
+    if [[ ! -f "${backup_path}" ]]; then
+        alenaal_error "Backup file '${backup_name}' not found in ${DBMS_BACKUP_PATH}"
+        _list_backups "${DBMS_BACKUP_PATH}" "*_${DBMS_BACKUP_FILE_SUFFIX}.tar.gz"
+        return 2
+    fi
+
+    # Check if the backup file has a *.tar.gz extension
+    if [[ ! "$backup_path" =~ \.tar\.gz$ ]]; then
+        alenaal_error "Invalid backup file format. Please provide a '*.tar.gz' file."
+        return 1
+    fi
+
+    # Start the restore process
+    alenaal_success "Backup found. Initiating restoration from '${backup_path}'..." --indent 2
+
+    # Check if PostgreSQL data directory exists
+    if [[ ! -d "${POSTGRESQL_DATA}" ]]; then
+        alenaal_not "PostgreSQL data directory not found: ${POSTGRESQL_DATA}" --indent 2
+        alenaal_ask "Create directory? (yes/no): " --indent 3
+        read -r create_dir
+
+        if [[ "$create_dir" == "yes" ]]; then
+            mkdir -p "${POSTGRESQL_DATA}" || {
+                alenaal_error "Failed to create directory: ${POSTGRESQL_DATA}"
+                return 2
+            }
+        else
+            alenaal_error "Restore cancelled"
+            return 2
+        fi
+    fi
+
+    # Remove existing data in the PostgreSQL data directory
+    alenaal_info "Removing existing data in ${POSTGRESQL_DATA}..." --indent 2
+    if ! rm -rf "${POSTGRESQL_DATA}"/* 2>/dev/null; then
+        alenaal_error "Failed to remove existing data. Check permissions."
+        return 2
+    fi
+    alenaal_success "Existing data removed." --indent 2
+
+    # Extract the backup file to the data directory
+    alenaal_info "Extracting backup to ${POSTGRESQL_DATA}..." --indent 2
+    if ! tar -xzf "$backup_path" -C / 2>/dev/null; then
+        alenaal_error "Failed to extract backup file"
+        return 2
+    fi
+    alenaal_success "Backup extraction successful." --indent 2
+
+    alenaal_newline
+    alenaal_complete "DBMS restore completed successfully"
+    alenaal_format "Restored from: ${backup_path}" --indent 2 --color blue
+    alenaal_format "Restored to: ${POSTGRESQL_DATA}" --indent 2 --color blue
+    alenaal_newline
+    alenaal_note "Remember to start PostgreSQL service" --bold
+    alenaal_newline
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _restore_data
+#
+# Performs individual database restore using psql.
+#
+# Drops the target database, recreates it, and applies the backup.
+#
+# Args:
+#   $@ - Options: -d|--dbname, -b|--backup, -u|--username, -p|--password
+#
+# Returns:
+#   0 - Restore successful
+#   1 - Invalid arguments or missing credentials
+#   2 - Restore failed
+# -----------------------------------------------------------------------------
+_restore_data() {
+    # Initialize variables
+    local username=""
+    local password=""
+    local db_name=""
+    local backup_name=""
+
+    # Parse named arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -d|--dbname)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--dbname' requires an argument"
+                    return 1
+                fi
+                db_name="$2"
+                shift 2
+                ;;
+
+            -b|--backup)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--backup' requires an argument"
+                    return 1
+                fi
+                backup_name="$2"
+                shift 2
+                ;;
+
+            -u|--username)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--username' requires an argument"
+                    return 1
+                fi
+                username="$2"
+                shift 2
+                ;;
+            
+            -p|--password)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--password' requires an argument"
+                    return 1
+                fi
+                password="$2"
+                shift 2
+                ;;
+
+            *)
+                alenaal_error "Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # Display welcome message with warning
+    alenaal_welcome "INITIATING DATABASE RESTORE PROCESS"
+    alenaal_newline
+
+    # Check if required arguments are provided
+    if [[ -n "$username" && -n "$password" ]]; then
+        export PGUSER="${username}"     # Set the username for PostgreSQL
+        export PGPASSWORD="${password}" # Set the password for PostgreSQL
+    elif [[ -n "$username" || -n "$password" ]]; then
+        alenaal_error "Both username and password must be provided together"
+        return 1
+    fi
+
+    # Check if backup directory exists
+    if [[ ! -d "${DATA_BACKUP_PATH}" ]]; then
+        alenaal_error "Data backup directory not found: ${DATA_BACKUP_PATH}"
+        return 2
+    fi
+
+    # Check if the backup_name argument is provided
+    if [[ -z "$backup_name" ]]; then
+        alenaal_format "Please choose a backup from the available options below:" --step --indent 2
+        _list_backups "${DATA_BACKUP_PATH}" "*_${DATA_BACKUP_FILE_SUFFIX}.sql.gz"
+        alenaal_ask "Enter the name of the backup you wish to restore: " --indent 3 --inline
+        read -r backup_name
+        if [[ -z "$backup_name" ]]; then
+            alenaal_error "No backup name provided"
+            return 1
+        fi
+    fi
+
+    # Check if the PGUSER is 'postgres' and display a warning
+    if [[ "${PGUSER}" == "postgres" ]]; then
+        alenaal_warning "Restoring as 'postgres' superuser is not recommended"
+        alenaal_suggestion "Create a dedicated restore user with appropriate permissions"
+    fi
+
+    # Construct the full path of the backup file
+    local backup_path="${DATA_BACKUP_PATH}/${backup_name}"
+
+    # Check if the backup file exists
+    if [[ ! -f "$backup_path" ]]; then
+        alenaal_error "Backup file '${backup_name}' not found in ${DATA_BACKUP_PATH}"
+        _list_backups "${DATA_BACKUP_PATH}" "*_${DATA_BACKUP_FILE_SUFFIX}.sql.gz"
+        return 2
+    fi
+
+    # Try to extract database name from backup filename
+    if [[ -z "$db_name" && "$backup_name" =~ $DATA_BACKUP_PATTERN ]]; then
+        db_name="${BASH_REMATCH[1]}"
+        alenaal_format "Extracted database name '${db_name}' from backup filename." --indent 4 --icon "🦘"
+        alenaal_ask "Use it? (yes/no): " --indent 5
+        read -r answer
+        if [[ "$answer" != "yes" ]]; then
+            db_name=""
+        fi
+    fi
+
+    # If still no database name, prompt user
+    if [[ -z "$db_name" ]]; then
+        alenaal_newline
+        alenaal_format "Please select a target database. Here are your current databases:" --step --indent 2
+        list_databases
+        alenaal_ask "Enter the name of the database to restore to: " --indent 3 --inline
+        read -r db_name
+
+        if [[ -z "$db_name" ]]; then
+            alenaal_error "No database name provided"
+            return 1
+        fi
+    fi
+
+    # Confirm with user
+    alenaal_alarm "This will DROP and RECREATE the target database!" --indent 4
+    alenaal_alarm "All existing data will be lost." --indent 4
+    alenaal_alarm "Restore '${backup_name}' to database '${db_name}'? (yes/no): " --indent 4 --inline --bold
+    read -r confirmation
+    alenaal_newline
+
+    if [[ "$confirmation" != "yes" ]]; then
+        alenaal_cancel "Restore cancelled by user" --bold
+        return 0
+    fi
+
+    # Check if the database exists
+    if ! _database_exists "${db_name}"; then
+        alenaal_note "Database '${db_name}' does not exist. It will be created." --indent 2 --bold
+    else
+        alenaal_note "Database '${db_name}' exists and will be DROPPED and RECREATED!" --indent 2 --bold
+    fi
+
+    # Start the restore process
+    alenaal_success "Starting restoration from '${backup_path}' to '${db_name}'." --indent 2
+
+    # Drop the existing database if it exists
+    if _database_exists "${db_name}"; then
+        alenaal_info "Dropping existing database '${db_name}'..." --indent 2
+        if ! dropdb "${db_name}" 2>/dev/null; then
+            alenaal_error "Failed to drop database '${db_name}'. Check permissions."
+            return 2
+        fi
+        alenaal_success "Database dropped." --indent 2
+    fi
+
+    # Create a new database with the specified owner
+    alenaal_info "Creating database '${db_name}'..." --indent 2
+    if ! createdb --owner="${PGUSER}" "${db_name}" 2>/dev/null; then
+        alenaal_error "Failed to create database '${db_name}'"
+        return 2
+    fi
+    alenaal_success "Database created successfully." --indent 2
+
+    # Apply the backup to the new database
+    alenaal_info "Applying backup to database '${db_name}'..." --indent 2
+    if ! gunzip -c "${backup_path}" | psql "${db_name}" &>/dev/null; then
+        alenaal_error "Failed to apply backup to database '${db_name}'"
+        return 2
+    fi
+    alenaal_success "Backup applied successfully." --indent 2
+
+    # Print a success message after the database is restored
+    alenaal_newline
+    alenaal_complete "Database '${db_name}' has been successfully restored from '${backup_name}'." --bold
+    alenaal_format "Backup location: ${backup_path}" --indent 2 --color blue
+    alenaal_format "Database: ${db_name}" --indent 2 --color blue
+    alenaal_newline
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _list_backups
+#
+# Lists available backup files in a directory matching a pattern.
+#
+# Args:
+#   $1 - directory: Directory to list backups from
+#   $2 - pattern: File pattern to match
+# -----------------------------------------------------------------------------
+_list_backups() {
+    local directory="$1"
+    local pattern="$2"
+
+    alenaal_newline
+    alenaal_format "Available Backups:" --color cyan --indent 3 --bold --icon "🗜️ "
+
+    if [[ ! -d "$directory" ]]; then
+        alenaal_warning "Directory not found: $directory"
+        return 1
+    fi
+
+    # Find and display matching files
+    local backups=()
+    while IFS= read -r file; do
+        if [[ -f "$file" ]]; then
+            backups+=("$(basename "$file")")
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -name "$pattern" 2>/dev/null | sort -r)
+
+    if [[ ${#backups[@]} -eq 0 ]]; then
+        alenaal_warning "No backups found matching pattern: $pattern"
+        return 1
+    fi
+
+    # Display each backup with index
+    local i=1
+    for backup in "${backups[@]}"; do
+        local size
+        size=$(du -h "${directory}/${backup}" | cut -f1)
+        alenaal_format "${i}. ${backup} (${size})" --item --indent 4
+        ((i++))
+    done
+
+    alenaal_newline
+}
+
+# -----------------------------------------------------------------------------
+# Function: _database_exists
+#
+# Checks if a database exists.
+#
+# Args:
+#   $1 - db_name: Database name to check
+#
+# Returns:
+#   0 if database exists, 1 otherwise
+# -----------------------------------------------------------------------------
+_database_exists() {
+    local db_name="$1"
+
+    if [[ -z "$db_name" ]]; then
+        return 1
+    fi
+
+    psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$db_name'" | grep -q 1
+    return $?
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

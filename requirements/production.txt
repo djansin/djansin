@@ -1,1 +1,7 @@
 -r base.txt
+
+# Production Server
+gunicorn~=26.0                          # WSGI server for production.
+
+## Database Connectivity
+psycopg2~=2.9                           # PostgreSQL adapter for Python that provides efficient database communication.

@@ -1,0 +1,355 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: runserver
+# Description: Django development server runner with migrations and static files
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Command Metadata
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="runserver"
+    [category]="django"
+    [description]="Run Django development server with migrations and static files"
+    [usage]="yarsin runserver [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="python django-admin"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit   # Exit immediately if a command exits with non-zero status
+set -o pipefail  # Return value of a pipeline is the status of the last command
+set -o nounset   # Treat unset variables as an error
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the runserver command.
+#
+# Description:
+#   Parses command-line options, validates the Django project structure,
+#   optionally runs migrations and collects static files, then starts the
+#   development server. The server runs on all network interfaces (0.0.0.0)
+#   on the configured port.
+#
+# Options:
+#   -m, --migrate         Apply pending migrations before starting
+#   -c, --collectstatic   Collect static files before starting
+#   -h, --help           Display this help message
+#
+# Environment Variables:
+#   WORK_DIRECTORY        Base directory for the Django project
+#   DJANGO_SETTINGS_MODULE Dotted path to Django settings module
+#   SERVER_PORT          Port for the development server (default: 8000)
+#
+# Returns:
+#   0 - Server started successfully
+#   1 - Invalid option provided
+#   2 - Settings module file not found
+#
+# Note:
+#   This function uses 'exec' to start the server, replacing the current
+#   process. This ensures proper signal handling and process management.
+# -----------------------------------------------------------------------------
+main() {
+    local run_migrate=false
+    local collectstatic=false
+
+    # -------------------------------------------------------------------------
+    # Parse command line arguments
+    # -------------------------------------------------------------------------
+    # Processes command-line flags to configure the server startup behavior.
+    # Supports migration and static file collection options before launch.
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+            -m|--migrate)
+                run_migrate=true
+                shift
+                ;;
+            -c|--collectstatic)
+                collectstatic=true
+                shift
+                ;;
+            *)
+                alenaal_error "Invalid option: '$1'"
+                alenaal_info "Usage: yarsin runserver [-m|--migrate] [-c|--collectstatic]"
+                return 1
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Validate Django project structure
+    # -------------------------------------------------------------------------
+    # Ensures the Django settings module exists at the expected location
+    # before attempting to start the server. Provides helpful error messages
+    # if the project structure is invalid.
+    # -------------------------------------------------------------------------
+    if ! check_settings_file; then
+        (
+            source "${YARSIN_CORE_PATH}/helpers/messages"
+            settings_module_not_found
+        )
+        return 2
+    fi
+
+    # -------------------------------------------------------------------------
+    # Execute requested operations
+    # -------------------------------------------------------------------------
+    # Performs pre-startup tasks based on user-provided flags:
+    # - Database migrations to ensure schema is up to date
+    # - Static file collection for serving static assets
+    # -------------------------------------------------------------------------
+    if [[ "$run_migrate" == true ]]; then
+        _run_migrations
+    fi
+
+    if [[ "$collectstatic" == true ]]; then
+        _collect_static_files
+    fi
+
+    # -------------------------------------------------------------------------
+    # Start the development server
+    # -------------------------------------------------------------------------
+    # Launches the Django development server. This function does not return
+    # as it replaces the current process with the server process.
+    # -------------------------------------------------------------------------
+    _start_dev_server
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays detailed help information for the runserver command.
+#
+# Description:
+#   Shows command usage, available options, and examples using the alenaal
+#   formatting system for consistent and visually appealing output.
+#   Includes information about environment variables and requirements.
+#
+# Output:
+#   Formatted help text printed to stdout with icons and color formatting.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "runserver - Django Development Server Runner" --header --icon "🚀"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Applies migrations and collects static files before starting the development server." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+    alenaal_format --item --list --bold -- "-m, --migrate"
+    alenaal_format "Apply pending database migrations before starting the server" --indent 4
+
+    alenaal_format --item --list --bold -- "-c, --collectstatic"
+    alenaal_format "Collect static files from all apps before starting" --indent 4
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "WORK_DIRECTORY" --item --list --bold
+    alenaal_format "Base directory for the Django project (default: current directory)" --indent 4
+
+    alenaal_format "DJANGO_SETTINGS_MODULE" --item --list --bold
+    alenaal_format "Dotted path to Django settings module (e.g., myproject.settings)" --indent 4
+
+    alenaal_format "SERVER_PORT" --item --list --bold
+    alenaal_format "Port for the development server (default: 8000)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+    alenaal_format "yarsin runserver" --item --icon "⇢" --bold
+    alenaal_format "Start server with default settings" --indent 4
+
+    alenaal_format "yarsin runserver --migrate" --item --icon "⇢" --bold
+    alenaal_format "Apply migrations before starting" --indent 4
+
+    alenaal_format "yarsin runserver --migrate --collectstatic" --item --icon "⇢" --bold
+    alenaal_format "Apply migrations, collect static files, then start server" --indent 4
+
+    alenaal_format "SERVER_PORT=8080 yarsin runserver" --item --icon "⇢" --bold
+    alenaal_format "Start server on port 8080" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Python 3.6+" --item --list
+    alenaal_format "Django 5.2+" --item --list
+    alenaal_format "Valid Django project with settings module" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions that implement specific functionality for the
+# runserver command. These functions are prefixed with underscore to indicate
+# they are internal to this command and not meant to be called directly.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _run_migrations
+#
+# Applies pending database migrations without user interaction.
+#
+# Description:
+#   Runs Django's migrate command with --no-input flag to apply all pending
+#   database migrations automatically without prompting for confirmation.
+#   This ensures the database schema is up to date before server startup.
+#
+# Dependencies:
+#   django-admin - Must be available in PATH
+#
+# Output:
+#   Progress messages using alenaal_info
+#
+# Returns:
+#   Does not return - exits with django-admin's exit code on failure
+# -----------------------------------------------------------------------------
+_run_migrations() {
+    alenaal_info "Applying database migrations..."
+    django-admin migrate --no-input
+}
+
+# -----------------------------------------------------------------------------
+# Function: _collect_static_files
+#
+# Collects static files from all apps into the STATIC_ROOT directory.
+#
+# Description:
+#   Runs Django's collectstatic command with --no-input flag to gather all
+#   static files from installed apps and copy them to the configured
+#   STATIC_ROOT directory without prompting. This prepares static assets
+#   for serving by the development server.
+#
+# Dependencies:
+#   django-admin - Must be available in PATH
+#
+# Output:
+#   Progress messages using alenaal_info
+#
+# Returns:
+#   Does not return - exits with django-admin's exit code on failure
+# -----------------------------------------------------------------------------
+_collect_static_files() {
+    alenaal_info "Collecting static files..."
+    django-admin collectstatic --no-input
+}
+
+# -----------------------------------------------------------------------------
+# Function: _start_dev_server
+#
+# Starts the Django development server.
+#
+# Description:
+#   Launches the Django development server bound to all network interfaces
+#   on the specified port. Uses exec to replace the current process with
+#   the server process. This function does not return - the server continues
+#   running until terminated.
+#
+# Globals:
+#   SERVER_PORT - Port number for the development server (default: 8000)
+#
+# Dependencies:
+#   django-admin - Must be available in PATH
+#
+# Output:
+#   Success message with port information
+#
+# Note:
+#   Uses exec to replace the current process, ensuring proper signal
+#   handling and that the server becomes the main process.
+# -----------------------------------------------------------------------------
+_start_dev_server() {
+    local port="${SERVER_PORT:-8000}"
+    local host="${SERVER_HOST:-0.0.0.0}"
+    alenaal_success "Starting development server on port ${port}..."
+    exec django-admin runserver "${host}:${port}"
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

@@ -1,0 +1,899 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: bumng (Backup Management)
+# Description: PostgreSQL backup management utilities (list, delete, rename)
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="bumng"
+    [category]="database"
+    [description]="PostgreSQL backup management utilities (list, delete, rename)"
+    [usage]="yarsin bumng <command> [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="postgresql-client"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the bumng command.
+#
+# Description:
+#   Provides backup management utilities for PostgreSQL backups:
+#   - List backups with filtering and pagination
+#   - Delete backup files
+#   - Rename backup files
+#
+# Arguments:
+#   $@ - Command and options
+#
+# Commands:
+#   list          List backups with optional filters
+#   delete        Delete a backup file
+#   rename        Rename a backup file
+#
+# Options:
+#   -h, --help    Display help message
+#
+# Environment Variables:
+#   BACKUP_ROOT         Root backup directory (default: /backup)
+#   DBMS_BACKUP_PATH    DBMS backup directory (default: ${BACKUP_ROOT}/dbms)
+#   DBMS_BACKUP_GLOB    DBMS backup file pattern (default: *_dbms.tar.gz)
+#   DATA_BACKUP_PATH    Data backup directory (default: ${BACKUP_ROOT}/databases)
+#   DATA_BACKUP_GLOB    Data backup file pattern (default: *_data.sql.gz)
+#
+# Returns:
+#   0 - Operation completed successfully
+#   1 - Invalid arguments
+#   2 - Operation failed
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    if [[ $# -eq 0 ]]; then
+        show_help
+        return 0
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+            
+            list)
+                shift
+                _list_backups "$@"
+                return $?
+                ;;
+
+            delete)
+                shift
+                _delete_backup "$@"
+                return $?
+                ;;
+            
+            rename)
+                shift
+                _rename_backup "$@"
+                return $?
+                ;;
+
+            *)
+                alenaal_error "Invalid command: '$1'"
+                alenaal_suggestion "Available commands: list, delete, rename"
+                alenaal_suggestion "Use 'yarsin bumng --help' for usage information"
+                return 1
+                ;;
+        esac
+    done
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the bumng command.
+#
+# Provides detailed information about backup management operations
+# including listing, deleting, and renaming backups.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "bumng - PostgreSQL Backup Management" --header --icon "📂"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Manage PostgreSQL backups: list, delete, and rename backup files." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin bumng list [OPTIONS]          # List backups" --item --icon "⇢"
+    alenaal_format "yarsin bumng delete <name>           # Delete a backup" --item --icon "⇢"
+    alenaal_format "yarsin bumng rename <old> <new>      # Rename a backup" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Commands Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Commands:" --section --option
+
+    alenaal_format "list" --item --list --bold
+    alenaal_format "List backups with optional filters (see List Options below)" --indent 4
+
+    alenaal_format "delete" --item --list --bold
+    alenaal_format "Delete a backup file" --indent 4
+    alenaal_format "Usage: yarsin bumng delete <backup_name>" --indent 4 --italic
+
+    alenaal_format "rename" --item --list --bold
+    alenaal_format "Rename a backup file" --indent 4
+    alenaal_format "Usage: yarsin bumng rename <old_name> <new_name>" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # List Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "List Options - yarsin bumng list [OPTIONS]" --section --info
+
+    alenaal_format  --item --list --bold -- "--dbms"
+    alenaal_format "Show only DBMS backups (full PostgreSQL data directory)" --indent 4
+    alenaal_format "Pattern: ${DBMS_BACKUP_GLOB}" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "--data"
+    alenaal_format "Show only database backups (individual database dumps)" --indent 4
+    alenaal_format "Pattern: ${DATA_BACKUP_GLOB}" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "--all"
+    alenaal_format "Show all backups (default)" --indent 4
+
+    alenaal_format --item --list --bold -- "-l, --limit N"
+    alenaal_format "Limit number of results per page (default: 5)" --indent 4
+
+    alenaal_format --item --list --bold -- "-p, --page N"
+    alenaal_format "Page number for pagination (default: 1)" --indent 4
+
+    alenaal_format --item --list --bold -- "-f, --from DATE"
+    alenaal_format "Filter backups from date (format: YYYY-MM-DD)" --indent 4
+
+    alenaal_format --item --list --bold -- "-t, --to DATE"
+    alenaal_format "Filter backups to date (format: YYYY-MM-DD)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Delete/Rename Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Delete/Rename Options:" --section --info
+
+    alenaal_format "delete - yarsin bumng delete <backup_name>" --subsection --bold
+    alenaal_format "yarsin bumng delete postgresql___2024_01_15__02_30_00___full.tar.gz" --item --icon "⇢" --indent 4 --bold
+
+    alenaal_format "rename - yarsin bumng rename <old_name> <new_name>" --subsection --bold
+    alenaal_format "yarsin bumng rename old_backup.tar.gz new_backup.tar.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "BACKUP_ROOT" --item --list --bold
+    alenaal_format "Root backup directory (default: /backup)" --indent 4
+
+    alenaal_format "DBMS_BACKUP_PATH" --item --list --bold
+    alenaal_format "DBMS backup directory (default: \${BACKUP_ROOT}/dbms)" --indent 4
+
+    alenaal_format "DBMS_BACKUP_GLOB" --item --list --bold
+    alenaal_format "DBMS backup file pattern (default: *_full.tar.gz)" --indent 4
+
+    alenaal_format "DATA_BACKUP_PATH" --item --list --bold
+    alenaal_format "Data backup directory (default: \${BACKUP_ROOT}/databases)" --indent 4
+
+    alenaal_format "DATA_BACKUP_GLOB" --item --list --bold
+    alenaal_format "Data backup file pattern (default: *_dump.sql.gz)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "List all backups (default)" --subsection --italic
+    alenaal_format "yarsin bumng list" --item --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "List only DBMS backups" --subsection --italic
+    alenaal_format "yarsin bumng list --dbms" --item --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "List with pagination" --subsection --italic
+    alenaal_format "yarsin bumng list --limit 10 --page 2" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Show 10 backups per page, page 2" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Filter by date range" --subsection --italic
+    alenaal_format "yarsin bumng list --from 2024-01-01 --to 2024-01-31" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Show backups from January 2024" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Delete a backup" --subsection --italic
+    alenaal_format "yarsin bumng delete postgresql___2024_01_15__02_30_00___full.tar.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Delete specific backup file" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Rename a backup" --subsection --italic
+    alenaal_format "yarsin bumng rename old_backup.tar.gz new_backup.tar.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Rename backup file" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Backup Locations Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Backup Locations:" --section --info
+    alenaal_format "DBMS backups:  ${DBMS_BACKUP_PATH}/" --item --list
+    alenaal_format "Data backups:  ${DATA_BACKUP_PATH}/" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Read/write permissions in backup directories" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0  - Operation completed successfully" --item --list
+    alenaal_format "1  - Invalid arguments" --item --list
+    alenaal_format "2  - Operation failed (backup not found, permission denied, etc.)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# LIST COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for listing backups.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _list_backups
+#
+# Main list dispatcher function.
+#
+# Parses list-specific options and calls appropriate listing function.
+#
+# Args:
+#   $@ - List options (--dbms, --data, --all, --limit, --page, --from, --to)
+# -----------------------------------------------------------------------------
+_list_backups() {
+    local type="all"
+    local limit=5
+    local page=1
+    local from=""
+    local to=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help)
+                show_help
+                return 0
+                ;;
+            
+            --dbms)
+                type="dbms"
+                shift
+                ;;
+            
+            --data)
+                type="data"
+                shift
+                ;;
+            
+            --all)
+                type="all"
+                shift
+                ;;
+            
+            -l|--limit)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--limit' requires a number"
+                    return 1
+                fi
+                if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+                    alenaal_error "Limit must be a positive number: $2"
+                    return 1
+                fi
+                limit="$2"
+                shift 2
+                ;;
+            
+            -p|--page)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--page' requires a number"
+                    return 1
+                fi
+                if [[ ! "$2" =~ ^[0-9]+$ ]] || [[ "$2" -lt 1 ]]; then
+                    alenaal_error "Page must be a positive number: $2"
+                    return 1
+                fi
+                page="$2"
+                shift 2
+                ;;
+            
+            -f|--from)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--from' requires a date (YYYY-MM-DD)"
+                    return 1
+                fi
+                if [[ ! "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+                    alenaal_error "Invalid date format. Use YYYY-MM-DD: $2"
+                    return 1
+                fi
+                from="$2"
+                shift 2
+                ;;
+            
+            -t|--to)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--to' requires a date (YYYY-MM-DD)"
+                    return 1
+                fi
+                if [[ ! "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+                    alenaal_error "Invalid date format. Use YYYY-MM-DD: $2"
+                    return 1
+                fi
+                to="$2"
+                shift 2
+                ;;
+            
+            *)
+                alenaal_error "Unknown list option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # Call appropriate listing function based on type
+    case "$type" in
+        dbms)
+            _show_dbms_backups "$limit" "$page" "$from" "$to"
+            ;;
+        data)
+            _show_data_backups "$limit" "$page" "$from" "$to"
+            ;;
+        all)
+            _show_all_backups "$limit" "$page" "$from" "$to"
+            ;;
+    esac
+}
+
+# -----------------------------------------------------------------------------
+# Function: _show_dbms_backups
+#
+# Shows DBMS (full PostgreSQL data directory) backups.
+#
+# Args:
+#   $1 - limit: Number of results per page
+#   $2 - page: Page number
+#   $3 - from: Start date filter (YYYY-MM-DD)
+#   $4 - to: End date filter (YYYY-MM-DD)
+# -----------------------------------------------------------------------------
+_show_dbms_backups() {
+    local limit="$1"
+    local page="$2"
+    local from="$3"
+    local to="$4"
+
+    alenaal_newline
+    alenaal_format "DBMS Backups (Full PostgreSQL Data Directory):" --subsection --bold --indent 2
+    alenaal_format "Location: ${DBMS_BACKUP_PATH}" --item --italic --indent 2
+
+    if [[ ! -d "${DBMS_BACKUP_PATH}" ]]; then
+        alenaal_warning "DBMS backup directory does not exist: ${DBMS_BACKUP_PATH}" --indent 3
+        return 0
+    fi
+
+    # Build find command with filters
+    local find_cmd="find '${DBMS_BACKUP_PATH}' -maxdepth 1 -type f -name '${DBMS_BACKUP_GLOB}'"
+
+    # Add date filters if specified
+    if [[ -n "$from" ]]; then
+        local from_timestamp
+        from_timestamp=$(date -d "$from" +%s 2>/dev/null)
+        if [[ -n "$from_timestamp" ]]; then
+            find_cmd+=" -newermt '$from'"
+        else
+            alenaal_warning "Invalid from date, ignoring filter: $from"
+        fi
+    fi
+
+    if [[ -n "$to" ]]; then
+        local to_timestamp
+        to_timestamp=$(date -d "$to 23:59:59" +%s 2>/dev/null)
+        if [[ -n "$to_timestamp" ]]; then
+            find_cmd+=" ! -newermt '$to 23:59:59'"
+        else
+            alenaal_warning "Invalid to date, ignoring filter: $to"
+        fi
+    fi
+
+    # Get total count for pagination
+    local total=$(eval "$find_cmd" 2>/dev/null | wc -l)
+    if [[ "$total" -eq 0 ]]; then
+        alenaal_warning "No DBMS backups found" --indent 3
+        return 0
+    fi
+
+    # Calculate pagination
+    local start=$(( (page - 1) * limit + 1 ))
+    if [[ $start -gt $total ]]; then
+        start=$(( total / limit * limit + 1))
+        page=$(( total / limit + 1 ))
+
+        if [[ $start -gt $total ]]; then
+            page=$(( total / limit ))
+            start=$(( (page - 1) * limit + 1 ))
+        fi
+    fi
+    local end=$(( page * limit ))
+    if [[ "$end" -gt "$total" ]]; then
+        end="$total"
+    fi
+
+    alenaal_info "Showing $start-$end of $total backups (Page $page)" --indent 3
+
+    # Execute find and pipe to list_backups function
+    eval "$find_cmd" 2>/dev/null | sort -r | sed -n "${start},${end}p" | while read -r file; do
+        _list_backups_single "$file"
+    done
+
+    # Show pagination info
+    if [[ "$total" -gt "$limit" ]] && [[ $end -lt $total ]]; then
+        alenaal_newline
+        alenaal_note "Use '--page $((page + 1))' to see next page" --indent 2
+    fi
+
+    alenaal_newline
+}
+
+# -----------------------------------------------------------------------------
+# Function: _show_data_backups
+#
+# Shows database (individual database dumps) backups.
+#
+# Args:
+#   $1 - limit: Number of results per page
+#   $2 - page: Page number
+#   $3 - from: Start date filter (YYYY-MM-DD)
+#   $4 - to: End date filter (YYYY-MM-DD)
+# -----------------------------------------------------------------------------
+_show_data_backups() {
+    local limit="$1"
+    local page="$2"
+    local from="$3"
+    local to="$4"
+
+    alenaal_newline
+    alenaal_format "Database Backups (Individual Database Dumps):" --subsection --bold --indent 2
+    alenaal_format "Location: ${DATA_BACKUP_PATH}" --item --italic --indent 2
+
+    if [[ ! -d "${DATA_BACKUP_PATH}" ]]; then
+        alenaal_warning "Database backup directory does not exist: ${DATA_BACKUP_PATH}" --indent 3
+        return 0
+    fi
+
+    # Build find command with filters
+    local find_cmd="find '${DATA_BACKUP_PATH}' -maxdepth 1 -type f -name '${DATA_BACKUP_GLOB}'"
+
+    # Add date filters if specified
+    if [[ -n "$from" ]]; then
+        local from_timestamp=$(date -d "$from" +%s 2>/dev/null)
+        if [[ -n "$from_timestamp" ]]; then
+            find_cmd+=" -newermt '$from'"
+        else
+            alenaal_warning "Invalid from date, ignoring filter: $from"
+        fi
+    fi
+
+    if [[ -n "$to" ]]; then
+        local to_timestamp=$(date -d "$to 23:59:59" +%s 2>/dev/null)
+        if [[ -n "$to_timestamp" ]]; then
+            find_cmd+=" ! -newermt '$to 23:59:59'"
+        else
+            alenaal_warning "Invalid to date, ignoring filter: $to"
+        fi
+    fi
+
+    # Get total count for pagination
+    local total=$(eval "$find_cmd" 2>/dev/null | wc -l)
+
+    if [[ "$total" -eq 0 ]]; then
+        alenaal_warning "No database backups found" --indent 3
+        return 0
+    fi
+
+    # Calculate pagination
+    local start=$(( (page - 1) * limit + 1 ))
+    if [[ $start -gt $total ]]; then
+        start=$(( total / limit * limit + 1))
+        page=$(( total / limit + 1 ))
+
+        if [[ $start -gt $total ]]; then
+            page=$(( total / limit ))
+            start=$(( (page - 1) * limit + 1 ))
+        fi
+    fi
+    local end=$(( page * limit ))
+    if [[ "$end" -gt "$total" ]]; then
+        end="$total"
+    fi
+
+    alenaal_info "Showing $start-$end of $total backups (Page $page)" --indent 3
+
+    # Execute find and display files
+    eval "$find_cmd" 2>/dev/null | sort -r | sed -n "${start},${end}p" | while read -r file; do
+        _list_backups_single "$file"
+    done
+
+    # Show pagination info
+    if [[ "$total" -gt "$limit" ]] && [[ $end -lt $total ]]; then
+        alenaal_newline
+        alenaal_note "Use '--page $((page + 1))' to see next page" --indent 2
+    fi
+
+    alenaal_newline
+}
+
+# -----------------------------------------------------------------------------
+# Function: _show_all_backups
+#
+# Shows all backups (both DBMS and database).
+#
+# Args:
+#   $1 - limit: Number of results per page
+#   $2 - page: Page number
+#   $3 - from: Start date filter (YYYY-MM-DD)
+#   $4 - to: End date filter (YYYY-MM-DD)
+# -----------------------------------------------------------------------------
+_show_all_backups() {
+    local limit="$1"
+    local page="$2"
+    local from="$3"
+    local to="$4"
+
+    alenaal_newline
+    alenaal_format "All PostgreSQL Backups" --header --icon "🗜️ " --no-newline
+
+    _show_dbms_backups "$limit" "$page" "$from" "$to"
+    _show_data_backups "$limit" "$page" "$from" "$to"
+}
+
+
+# -----------------------------------------------------------------------------
+# Function: _list_backups_single
+#
+# Displays a single backup file with formatted output.
+#
+# Args:
+#   $1 - file: Full path to backup file
+# -----------------------------------------------------------------------------
+_list_backups_single() {
+    local file="$1"
+
+    if [[ ! -f "$file" ]]; then
+        return 1
+    fi
+
+    local filename
+    filename=$(basename "$file")
+
+    local size
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS/BSD
+        size=$(stat -f "%z" "$file" 2>/dev/null)
+        size=$(numfmt --to=iec "$size" 2>/dev/null || echo "${size}B")
+    else
+        # Linux/GNU
+        size=$(stat -c "%s" "$file" 2>/dev/null)
+        size=$(numfmt --to=iec "$size" 2>/dev/null || echo "${size}B")
+    fi
+
+    local mod_date
+    if [[ "$(uname)" == "Darwin" ]]; then
+        mod_date=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
+    else
+        mod_date=$(stat -c "%y" "$file" 2>/dev/null | cut -d'.' -f1)
+    fi
+
+    # Truncate filename if too long
+    if [[ ${#filename} -gt 50 ]]; then
+        filename="${filename:0:47}..."
+    fi
+
+    printf "    \033[1;36m•\033[0m \033[1;33m%-50s\033[0m  \033[1;32m[%8s]\033[0m  \033[1;34m%s\033[0m\n" \
+        "$filename" "$size" "$mod_date"
+}
+
+
+# =============================================================================
+# DELETE COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for deleting backups.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _delete_backup
+#
+# Deletes a backup file.
+#
+# Args:
+#   $@ - Backup name
+# -----------------------------------------------------------------------------
+_delete_backup() {
+    local backup_name=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help)
+                show_help
+                return 0
+                ;;
+            
+            -*)
+                alenaal_error "Unknown delete option: $1"
+                return 1
+                ;;
+            
+            *)
+                if [[ -n "$backup_name" ]]; then
+                    alenaal_error "Multiple backup names specified: '$backup_name' and '$1'"
+                    return 1
+                fi
+                backup_name="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$backup_name" ]]; then
+        alenaal_error "No backup name provided for deletion"
+        alenaal_suggestion "Usage: yarsin bumng delete <backup_name>"
+        return 1
+    fi
+
+    # Search for backup in both directories
+    local backup_path=""
+    if [[ -f "${DBMS_BACKUP_PATH}/${backup_name}" ]]; then
+        backup_path="${DBMS_BACKUP_PATH}/${backup_name}"
+    elif [[ -f "${DATA_BACKUP_PATH}/${backup_name}" ]]; then
+        backup_path="${DATA_BACKUP_PATH}/${backup_name}"
+    else
+        alenaal_error "Backup not found: $backup_name"
+        alenaal_suggestion "Use 'yarsin bumng list' to see available backups"
+        return 2
+    fi
+
+    # Show backup details
+    alenaal_newline
+    alenaal_alarm "You are about to delete:" --bold
+    alenaal_newline
+    _list_backups_single "$backup_path"
+    alenaal_newline
+
+    # Confirm deletion
+    alenaal_ask "Are you sure you want to delete this backup? (yes/no): " --indent 2
+    read -r confirmation
+
+    if [[ "$confirmation" != "yes" ]]; then
+        alenaal_newline
+        alenaal_cancel "Deletion cancelled" --bold
+        alenaal_newline
+        return 0
+    fi
+
+    # Delete the file
+    if rm -f "$backup_path"; then
+        alenaal_newline
+        alenaal_complete "Backup deleted successfully: $backup_name" --bold
+        alenaal_newline
+        return 0
+    else
+        alenaal_error "Failed to delete backup: $backup_name"
+        return 2
+    fi
+}
+
+
+# =============================================================================
+# RENAME COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for renaming backups.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _rename_backup
+#
+# Renames a backup file.
+#
+# Args:
+#   $1 - old_name: Current backup name
+#   $2 - new_name: New backup name
+# -----------------------------------------------------------------------------
+_rename_backup() {
+    local old_name=""
+    local new_name=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help)
+                show_help
+                return 0
+                ;;
+            
+            -*)
+                alenaal_error "Unknown rename option: $1"
+                return 1
+                ;;
+            
+            *)
+                if [[ -z "$old_name" ]]; then
+                    old_name="$1"
+                elif [[ -z "$new_name" ]]; then
+                    new_name="$1"
+                else
+                    alenaal_error "Unexpected argument: $1"
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$old_name" ]]; then
+        alenaal_error "No source backup name provided"
+        alenaal_suggestion "Usage: yarsin bumng rename <old_name> <new_name>"
+        return 1
+    fi
+
+    if [[ -z "$new_name" ]]; then
+        alenaal_error "No destination backup name provided"
+        alenaal_suggestion "Usage: yarsin bumng rename <old_name> <new_name>"
+        return 1
+    fi
+
+    # Search for backup in both directories
+    local old_path=""
+    local target_dir=""
+    if [[ -f "${DBMS_BACKUP_PATH}/${old_name}" ]]; then
+        old_path="${DBMS_BACKUP_PATH}/${old_name}"
+        target_dir="${DBMS_BACKUP_PATH}"
+    elif [[ -f "${DATA_BACKUP_PATH}/${old_name}" ]]; then
+        old_path="${DATA_BACKUP_PATH}/${old_name}"
+        target_dir="${DATA_BACKUP_PATH}"
+    else
+        alenaal_error "Backup not found: $old_name"
+        alenaal_suggestion "Use 'yarsin bumng list' to see available backups"
+        return 2
+    fi
+
+    local new_path="${target_dir}/${new_name}"
+
+    # Check if destination already exists
+    if [[ -f "$new_path" ]]; then
+        alenaal_error "Destination already exists: $new_name"
+        alenaal_suggestion "Choose a different name or delete the existing backup first"
+        return 2
+    fi
+
+    # Show backup details
+    alenaal_newline
+    alenaal_format "Renaming:" --color blue --bold
+    _list_backups_single "$old_path"
+    alenaal_format "To:" --indent 2 --bold --color red
+    printf "    \033[91m•\033[0m \033[1;33m%s\033[0m\n" "$new_name"
+    alenaal_newline
+
+    # Confirm rename
+    alenaal_ask "Proceed with rename? (yes/no): " --indent 2
+    read -r confirmation
+
+    if [[ "$confirmation" != "yes" ]]; then
+        alenaal_newline
+        alenaal_cancel "Rename cancelled" --bold
+        alenaal_newline
+        return 0
+    fi
+
+    # Rename the file
+    if mv "$old_path" "$new_path"; then
+        alenaal_newline
+        alenaal_complete "Backup renamed successfully" --bold
+        alenaal_format "Old: $old_name" --indent 2 --color blue
+        alenaal_format "New: $new_name" --indent 2 --color blue
+        alenaal_newline
+        return 0
+    else
+        alenaal_error "Failed to rename backup: $old_name"
+        return 2
+    fi
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

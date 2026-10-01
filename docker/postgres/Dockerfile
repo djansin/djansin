@@ -1,9 +1,9 @@
-ARG POSTGRES_VERSION=14-alpine
+ARG POSTGRES_TAG=18-bookworm
 
 #########################################################
 # Set the base image to use for subsequent instructions #
 #########################################################
-FROM postgres:${POSTGRES_VERSION} AS postgres
+FROM postgres:${POSTGRES_TAG} AS postgres
 
 
 #########################################################

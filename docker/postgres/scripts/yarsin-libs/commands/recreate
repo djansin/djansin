@@ -1,0 +1,548 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: recreate
+# Description: Drop and recreate a PostgreSQL database
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="recreate"
+    [category]="database"
+    [description]="Drop and recreate a PostgreSQL database"
+    [usage]="yarsin recreate [OPTIONS] [DATABASE_NAME]"
+    [version]="1.0.0"
+    [requires]="postgresql-client"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Connection Configuration
+# -----------------------------------------------------------------------------
+# These environment variables are used by PostgreSQL client tools.
+# They can be set externally or will use these defaults.
+# -----------------------------------------------------------------------------
+
+# Set environment variables for PostgreSQL database connection
+export PGHOST="${POSTGRES_HOST:-localhost}"         # PostgreSQL server hostname
+export PGPORT="${POSTGRES_PORT:-5432}"              # PostgreSQL server port
+export PGUSER="${POSTGRES_USER:-postgres}"          # PostgreSQL username
+export PGPASSWORD="${POSTGRES_PASSWORD:-}"          # PostgreSQL password
+export PGDATABASE="${POSTGRES_DB:-postgres}"        # Default database name
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the recreate command.
+#
+# Description:
+#   Drops and recreates a PostgreSQL database. This is useful for resetting
+#   a database to a clean state, often before restoring a backup or running
+#   tests. The command will:
+#   1. Verify the database exists
+#   2. Prompt for confirmation (unless --force is used)
+#   3. Drop the existing database
+#   4. Create a new empty database with the same name
+#
+# Arguments:
+#   $1 - DATABASE_NAME: Name of the database to recreate (optional)
+#
+# Options:
+#   -d, --dbname NAME   Database name to recreate (overrides positional arg)
+#   -u, --username USER PostgreSQL username (overrides POSTGRES_USER)
+#   -p, --password PASS PostgreSQL password (overrides POSTGRES_PASSWORD)
+#   -f, --force         Skip confirmation prompt
+#   -h, --help          Display this help message
+#
+# Environment Variables:
+#   POSTGRES_HOST       Database host (default: localhost)
+#   POSTGRES_PORT       Database port (default: 5432)
+#   POSTGRES_USER       Database user (default: postgres)
+#   POSTGRES_PASSWORD   Database password (required)
+#   POSTGRES_DB         Default database (default: postgres)
+#
+# Returns:
+#   0 - Database recreated successfully
+#   1 - Invalid arguments or missing credentials
+#   2 - Operation failed
+# -----------------------------------------------------------------------------
+main() {
+    local username=""
+    local password=""
+    local db_name=""
+    local force=false
+
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -u|--username)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--username' requires an argument"
+                    return 1
+                fi
+                username="$2"
+                shift 2
+                ;;
+
+            -p|--password)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--password' requires an argument"
+                    return 1
+                fi
+                password="$2"
+                shift 2
+                ;;
+
+            -d|--dbname)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--dbname' requires an argument"
+                    return 1
+                fi
+                db_name="$2"
+                shift 2
+                ;;
+
+            -f|--force)
+                force=true
+                shift
+                ;;
+
+            --)
+                shift
+                if [[ -z "$db_name" && -n "$1" ]]; then
+                    db_name="$1"
+                fi
+                break
+                ;;
+
+            -*)
+                alenaal_error "Unknown option: $1"
+                alenaal_suggestion "Use 'yarsin recreate --help' for usage information"
+                return 1
+                ;;
+
+            *)
+                if [[ -z "$db_name" ]]; then
+                    db_name="$1"
+                else
+                    alenaal_error "Unexpected argument: $1"
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Set Credentials
+    # -------------------------------------------------------------------------
+    if [[ -n "$username" && -n "$password" ]]; then
+        export PGUSER="${username}"
+        export PGPASSWORD="${password}"
+    elif [[ -n "$username" || -n "$password" ]]; then
+        alenaal_error "Both username and password must be provided together"
+        return 1
+    fi
+
+    # Check if the PGUSER is 'postgres' and display a warning
+    if [[ "${PGUSER}" == "postgres" ]]; then
+        alenaal_warning "Operating as 'postgres' superuser is not recommended"
+        alenaal_suggestion "Create a dedicated user with appropriate permissions"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Get Database Name
+    # -------------------------------------------------------------------------
+    if [[ -z "$db_name" ]]; then
+        alenaal_newline
+        alenaal_format "Enter the name of the database to recreate:" --step
+        list_databases
+        alenaal_ask "Database name: " --indent 2
+        read -r db_name
+
+        if [[ -z "$db_name" ]]; then
+            alenaal_error "No database name provided"
+            return 1
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Verify Database Exists
+    # -------------------------------------------------------------------------
+    if ! _database_exists "$db_name"; then
+        alenaal_error "Database '$db_name' does not exist"
+        alenaal_suggestion "Use 'yarsin bumng list' to see available backups"
+        alenaal_suggestion "Use 'yarsin recreate' without arguments to list databases"
+        return 2
+    fi
+
+    # -------------------------------------------------------------------------
+    # Confirm Operation
+    # -------------------------------------------------------------------------
+    if [[ "$force" != true ]]; then
+        alenaal_newline
+        _show_database_info "$db_name"
+        alenaal_newline
+        alenaal_alarm "This will DESTROY and RECREATE database: $db_name" --indent 2
+        alenaal_alarm "All data in this database will be PERMANENTLY LOST!" --indent 2
+        alenaal_ask "Are you sure you want to continue? (type 'yes' to confirm): " --indent 2
+        read -r confirmation
+
+        if [[ "$confirmation" != "yes" ]]; then
+            alenaal_newline
+            alenaal_cancel "Operation cancelled by user"
+            alenaal_newline
+            return 0
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Drop Existing Database
+    # -------------------------------------------------------------------------
+    alenaal_newline
+    alenaal_info "Dropping database '$db_name'..." --indent 2
+    
+    # Terminate existing connections
+    _terminate_connections "$db_name"
+    
+    if ! dropdb "$db_name" 2>/dev/null; then
+        alenaal_error "Failed to drop database '$db_name'"
+        alenaal_suggestion "Check permissions and ensure no active connections"
+        return 2
+    fi
+    alenaal_success "Database dropped successfully." --indent 2
+
+    # -------------------------------------------------------------------------
+    # Create New Database
+    # -------------------------------------------------------------------------
+    alenaal_info "Creating database '$db_name'..." --indent 2
+    if ! createdb --owner="${PGUSER}" "$db_name" 2>/dev/null; then
+        alenaal_error "Failed to create database '$db_name'"
+        return 2
+    fi
+    alenaal_success "Database created successfully." --indent 2
+
+    # -------------------------------------------------------------------------
+    # Verify Creation
+    # -------------------------------------------------------------------------
+    if _database_exists "$db_name"; then
+        alenaal_newline
+        alenaal_complete "Database '$db_name' has been recreated successfully" --bold
+        alenaal_format "The database is now empty and ready for use" --indent 2 --color blue
+        alenaal_newline
+    else
+        alenaal_error "Database verification failed - database does not exist after creation"
+        return 2
+    fi
+
+    return 0
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the recreate command.
+#
+# Provides detailed information about dropping and recreating databases,
+# including warnings about data loss and usage examples.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "recreate - Drop and Recreate PostgreSQL Database" --header --icon "🔄"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Drops an existing database and creates a new empty one with the same name." --item
+    alenaal_format "Useful for resetting a database to a clean state before restoring a backup." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin recreate myapp              # Recreate 'myapp' database" --item --icon "⇢"
+    alenaal_format "yarsin recreate --dbname myapp     # Alternative syntax" --item --icon "⇢"
+    alenaal_format "yarsin recreate                    # Interactive mode (lists databases)" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+
+    alenaal_format  --item --list --bold -- "-d, --dbname NAME"
+    alenaal_format "Database name to recreate" --indent 4
+
+    alenaal_format --item --list --bold -- "-u, --username USER"
+    alenaal_format "PostgreSQL username (overrides POSTGRES_USER)" --indent 4
+
+    alenaal_format --item --list --bold -- "-p, --password PASS"
+    alenaal_format "PostgreSQL password (overrides POSTGRES_PASSWORD)" --indent 4
+
+    alenaal_format --item --list --bold -- "-f, --force"
+    alenaal_format "Skip confirmation prompt (use with caution!)" --indent 4
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "POSTGRES_HOST" --item --list --bold
+    alenaal_format "Database host (default: localhost)" --indent 4
+
+    alenaal_format "POSTGRES_PORT" --item --list --bold
+    alenaal_format "Database port (default: 5432)" --indent 4
+
+    alenaal_format "POSTGRES_USER" --item --list --bold
+    alenaal_format "Database user (default: postgres)" --indent 4
+
+    alenaal_format "POSTGRES_PASSWORD" --item --list --bold
+    alenaal_format "Database password (REQUIRED for authentication)" --indent 4
+
+    alenaal_format "POSTGRES_DB" --item --list --bold
+    alenaal_format "Default database for connection (default: postgres)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Basic usage" --subsection --italic
+    alenaal_format "yarsin recreate myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Drop and recreate 'myapp' database (with confirmation)" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "With credentials" --subsection --italic
+    alenaal_format "yarsin recreate --username admin --password secret myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Recreate database with specific credentials" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Force mode (no confirmation)" --subsection --italic
+    alenaal_format "yarsin recreate --force myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "CAUTION: Skips confirmation prompt" --indent 5 --warning
+    alenaal_newline
+
+    alenaal_format "Interactive mode" --subsection --italic
+    alenaal_format "yarsin recreate" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Lists databases and prompts for selection" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "With environment variables" --subsection --italic
+    alenaal_format "export POSTGRES_HOST=db.example.com" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export POSTGRES_USER=app_user" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export POSTGRES_PASSWORD=secret" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin recreate myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "Before restore workflow" --subsection --italic
+    alenaal_format "yarsin recreate myapp && yarsin restore data -d myapp -b latest.sql.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Recreate database and restore from backup" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # ⚠️  WARNING Section
+    # -------------------------------------------------------------------------
+    alenaal_format "IMPORTANT WARNINGS:" --section --warning
+
+    alenaal_format "Data Loss:" --item --list --bold
+    alenaal_format "This command PERMANENTLY DELETES all data in the database" --indent 4
+    alenaal_format "Make sure you have a backup before proceeding" --indent 4
+
+    alenaal_format "Connections:" --item --list --bold
+    alenaal_format "All active connections to the database will be terminated" --indent 4
+    alenaal_format "Applications using the database will be disconnected" --indent 4
+
+    alenaal_format "Permissions:" --item --list --bold
+    alenaal_format "Requires CREATEDB privilege or superuser access" --indent 4
+    alenaal_format "User must have permission to drop/create databases" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "PostgreSQL client tools (psql, dropdb, createdb)" --item --list
+    alenaal_format "CREATEDB privilege or superuser access" --item --list
+    alenaal_format "No active connections (or force-terminate capability)" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0  - Database recreated successfully" --item --list
+    alenaal_format "1  - Invalid arguments or missing credentials" --item --list
+    alenaal_format "2  - Operation failed (database not found, permission denied, etc.)" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # See Also Section
+    # -------------------------------------------------------------------------
+    alenaal_format "See Also:" --section --info
+    alenaal_format "yarsin backup     - Create database backups" --item --list
+    alenaal_format "yarsin restore    - Restore databases from backups" --item --list
+    alenaal_format "yarsin bumng      - List and manage backups" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for database operations.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _database_exists
+#
+# Checks if a database exists.
+#
+# Args:
+#   $1 - db_name: Database name to check
+#
+# Returns:
+#   0 if database exists, 1 otherwise
+# -----------------------------------------------------------------------------
+_database_exists() {
+    local db_name="$1"
+
+    if [[ -z "$db_name" ]]; then
+        return 1
+    fi
+
+    psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$db_name'" | grep -q 1
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _show_database_info
+#
+# Shows information about a database.
+#
+# Args:
+#   $1 - db_name: Database name
+# -----------------------------------------------------------------------------
+_show_database_info() {
+    local db_name="$1"
+
+    alenaal_format "Database Information:" --subsection
+
+    # Get database size
+    local db_size
+    db_size=$(psql -d postgres -tAc "SELECT pg_size_pretty(pg_database_size('$db_name'));" 2>/dev/null || echo "unknown")
+
+    # Get owner
+    local db_owner
+    db_owner=$(psql -d postgres -tAc "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = '$db_name';" 2>/dev/null || echo "unknown")
+
+    # Get connection count
+    local connections
+    connections=$(psql -d postgres -tAc "SELECT count(*) FROM pg_stat_activity WHERE datname = '$db_name';" 2>/dev/null || echo "0")
+
+    alenaal_format "Name:         $db_name" --item --indent 4
+    alenaal_format "Size:         $db_size" --item --indent 4
+    alenaal_format "Owner:        $db_owner" --item --indent 4
+    alenaal_format "Connections:  $connections" --item --indent 4
+}
+
+# -----------------------------------------------------------------------------
+# Function: _terminate_connections
+#
+# Terminates all connections to a database.
+#
+# Args:
+#   $1 - db_name: Database name
+# -----------------------------------------------------------------------------
+_terminate_connections() {
+    local db_name="$1"
+
+    alenaal_info "Terminating connections to '$db_name'..." --indent 2
+
+    # Try different methods based on PostgreSQL version
+    if psql -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$db_name' AND pid <> pg_backend_pid();" &>/dev/null; then
+        alenaal_success "Connections terminated" --indent 2
+    else
+        # Fallback for older PostgreSQL versions
+        psql -d postgres -c "SELECT pg_terminate_backend(procpid) FROM pg_stat_activity WHERE datname = '$db_name' AND procpid <> pg_backend_pid();" &>/dev/null && \
+            alenaal_success "Connections terminated" --indent 2 || \
+            alenaal_warning "Could not terminate some connections" --indent 2
+    fi
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

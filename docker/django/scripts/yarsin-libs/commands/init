@@ -1,0 +1,729 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: init
+# Description: Initialize a new Django project with multi-environment setup
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Command Metadata
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="init"
+    [category]="django"
+    [description]="Initialize a new Django project with multi-environment configuration"
+    [usage]="yarsin init [OPTIONS] [PROJECT_NAME] [PROJECT_DIR]"
+    [version]="1.0.0"
+    [requires]="python django-admin"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit script immediately if a command fails
+set -o pipefail # Exit script when a command in a pipeline fails
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the init command.
+#
+# Description:
+#   Creates a new Django project with an advanced multi-environment structure:
+#   - Environment-specific settings (base.py, development.py, production.py, testing.py)
+#   - Environment-specific URL configurations
+#   - Proper Python package structure with __init__.py files
+#   - Comprehensive documentation in generated files
+#
+# Arguments:
+#   $1 - PROJECT_NAME: Name of the Django project (default: from env or current dir)
+#   $2 - PROJECT_DIR: Directory to create project in (default: from env or current dir)
+#
+# Options:
+#   -n, --name NAME     Project name (overrides positional argument)
+#   -d, --dir DIRECTORY Project directory (overrides positional argument)
+#   -h, --help          Display this help message
+#
+# Environment Variables:
+#   PROJECT_NAME        Default project name if not specified
+#   WORK_DIRECTORY      Default working directory if not specified
+#
+# Returns:
+#   0 - Project initialized successfully
+#   1 - Missing required parameters
+#   2 - Project creation failed
+# -----------------------------------------------------------------------------
+main() {
+    local project_name=""
+    local project_dir=""
+
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+            
+            -n|--name)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--name' requires an argument"
+                    return 1
+                fi
+                project_name="$2"
+                shift 2
+                ;;
+
+            -d|--dir)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--dir' requires an argument"
+                    return 1
+                fi
+                project_dir="$2"
+                shift 2
+                ;;
+
+            --)
+                shift
+                if [[ -z "$project_name" && -n "$1" ]]; then
+                    project_name="$1"
+                    shift
+                fi
+                if [[ -z "$project_dir" && -n "$1" ]]; then
+                    project_dir="$1"
+                    shift
+                fi
+                break
+                ;;
+
+            -*)
+                alenaal_error "Unknown option: '$1'"
+                alenaal_suggestion "Use 'yarsin init --help' for usage information"
+                return 1
+                ;;
+
+            *)
+                if [[ -z "$project_name" ]]; then
+                    project_name="$1"
+                elif [[ -z "$project_dir" ]]; then
+                    project_dir="$1"
+                else
+                    alenaal_error "Unexpected argument: '$1'"
+                    alenaal_suggestion "Use 'yarsin init --help' for usage information" 
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Set Default Values
+    # -------------------------------------------------------------------------
+    project_name="${project_name:-${PROJECT_NAME:-}}"
+    project_dir="${project_dir:-${WORK_DIRECTORY:-$(pwd)}}"
+
+    # -------------------------------------------------------------------------
+    # Validate Inputs
+    # -------------------------------------------------------------------------
+    if [[ -z "$project_name" ]]; then
+        alenaal_error "Project name is required. Set PROJECT_NAME or provide as argument."
+        alenaal_suggestion "Use 'yarsin init --help' for usage information"
+        return 1
+    fi
+
+    if [[ -z "$project_dir" ]]; then
+        alenaal_error "Work directory is required. Set WORK_DIRECTORY or provide as argument."
+        alenaal_suggestion "Use 'yarsin init --help' for usage information"
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Create Base Django Project
+    # -------------------------------------------------------------------------
+    alenaal_info "Initializing Django project: ${project_name} in ${project_dir}"
+    if ! django-admin startproject "${project_name}" "${project_dir}" 2>/dev/null; then
+        alenaal_error "Failed to create Django project: ${project_name}"
+        return 2
+    fi
+
+    alenaal_success "Django project skeleton created"
+
+    # -------------------------------------------------------------------------
+    # SETTINGS CONFIGURATION
+    # -------------------------------------------------------------------------
+
+    # Create settings directory and organize configuration files
+    alenaal_info "Setting up environment-based configuration structure..."
+
+    # Create settings directory with __init__.py for Python package
+    if ! mkdir -p "${project_dir}/${project_name}/settings"; then
+        alenaal_error "Failed to create settings directory structure"
+        return 2
+    fi
+
+    # Create __init__.py to make settings a proper Python package
+    if ! touch "${project_dir}/${project_name}/settings/__init__.py"; then
+        alenaal_error "Could not create __init__.py in settings directory"
+        return 2
+    fi
+
+    # Move the default settings.py to base.py as our foundation
+    if ! mv "${project_dir}/${project_name}/settings.py" "${project_dir}/${project_name}/settings/base.py"; then
+        alenaal_error "Failed to move settings.py to base.py"
+        return 2
+    fi
+    alenaal_success "Base settings file created: ./${project_name}/settings/base.py"
+
+    # Generate environment-specific settings files
+    alenaal_info "Creating environment-specific settings files..."
+
+    if ! _generate_setting_file "production" "${project_name}" "${project_dir}"; then
+        alenaal_error "Failed to create production settings"
+        return 2
+    fi
+    alenaal_success "Production settings created: ./${project_name}/settings/production.py"
+
+    if ! _generate_setting_file "development" "${project_name}" "${project_dir}"; then
+        alenaal_error "Failed to create development settings"
+        return 2
+    fi
+    alenaal_success "Development settings created: ./${project_name}/settings/development.py"
+
+    if ! _generate_setting_file "testing" "${project_name}" "${project_dir}"; then
+        alenaal_error "Failed to create testing settings"
+        return 2
+    fi
+    alenaal_success "Testing settings created: ./${project_name}/settings/testing.py"
+
+    # -------------------------------------------------------------------------
+    # URL CONFIGURATION
+    # -------------------------------------------------------------------------
+
+    # Create URLs directory and organize routing files
+    alenaal_info "Setting up environment-based URL structure..."
+
+    # Create URLs directory with __init__.py for Python package
+    if ! mkdir -p "${project_dir}/${project_name}/urls"; then       
+        alenaal_error "Failed to create URLs directory structure"
+        return 2
+    fi
+
+    # Create __init__.py to make urls a proper Python package
+    if ! touch "${project_dir}/${project_name}/urls/__init__.py"; then
+        alenaal_error "Could not create __init__.py in urls directory"
+        return 2
+    fi
+
+    # Move the default urls.py to base.py as our routing foundation
+    if ! mv "${project_dir}/${project_name}/urls.py" "${project_dir}/${project_name}/urls/base.py"; then
+        alenaal_error "Failed to move urls.py to base.py"
+        return 2
+    fi
+    alenaal_success "Base URL configuration created: ./${project_name}/urls/base.py"
+
+    # Generate environment-specific URL configuration files
+    alenaal_info "Creating environment-specific URL configurations..."
+
+    if ! _generate_urls_file "production" "${project_name}" "${project_dir}"; then
+        alenaal_error "Failed to create production URLs"
+        return 2
+    fi
+    alenaal_success "Production URLs created: ./${project_name}/urls/production.py"
+
+    if ! _generate_urls_file "development" "${project_name}" "${project_dir}"; then
+        alenaal_error "Failed to create development URLs"
+        return 2
+    fi
+    alenaal_success "Development URLs created: ./${project_name}/urls/development.py"
+
+    if ! _generate_urls_file "testing" "${project_name}" "${project_dir}"; then
+        alenaal_error "Failed to create testing URLs"
+        return 2
+    fi
+    alenaal_success "Testing URLs created: ./${project_name}/urls/testing.py"
+
+    # -------------------------------------------------------------------------
+    # FINALIZATION
+    # -------------------------------------------------------------------------
+    _project_successfully_initiated_message "${project_name}" "${project_dir}"
+
+    return 0
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the init command.
+#
+# Provides detailed information about project initialization, directory
+# structure, and configuration options for multi-environment Django setups.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "init - Initialize Django Project with Multi-Environment Setup" --header --icon "🚀"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Creates a production-ready Django project with environment-specific" --item
+    alenaal_format "settings and URL configurations for development, testing, and production." --item
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin init myproject" --item --icon "⇢"
+    alenaal_format "yarsin init myproject /path/to/project/directory" --item --icon "⇢"
+    alenaal_format "yarsin init --name myproject --dir /path/to/project/directory" --item --icon "⇢"
+    alenaal_format "yarsin init -- myproject /path/to/project/directory" --item --icon "⇢"
+    alenaal_format "PROJECT_NAME=myproject yarsin init" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+
+    alenaal_format  --item --list --bold -- "-n, --name NAME"
+    alenaal_format "Project name (e.g., myproject, backend, api)" --indent 4
+    alenaal_format "Overrides PROJECT_NAME environment variable" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-d, --dir DIRECTORY"
+    alenaal_format "Target directory for project creation" --indent 4
+    alenaal_format "Overrides WORK_DIRECTORY environment variable" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Arguments Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Positional Arguments:" --section --info
+    alenaal_format "PROJECT_NAME" --item --list --bold
+    alenaal_format "Name of the Django project to create" --indent 4
+
+    alenaal_format "PROJECT_DIR" --item --list --bold
+    alenaal_format "Directory where the project will be created (optional)" --indent 4
+    alenaal_format "Defaults to current directory if not specified" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Generated Structure Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Generated Structure:" --section --example
+    alenaal_format "The command creates the following project structure:" --item
+
+    alenaal_format "PROJECT_ROOT/" --indent 3 --bold
+    alenaal_format "├─ manage.py" --indent 4
+    alenaal_format "├─ PROJECT_NAME/" --indent 4
+    alenaal_format "│  ├─ __init__.py" --indent 4
+    alenaal_format "│  ├─ asgi.py" --indent 4
+    alenaal_format "│  ├─ wsgi.py" --indent 4
+    alenaal_format "│  ├─ settings/" --indent 4
+    alenaal_format "│  │  ├─ __init__.py" --indent 4
+    alenaal_format "│  │  ├─ base.py        # Foundation settings" --indent 4
+    alenaal_format "│  │  ├─ development.py # Development overrides" --indent 4
+    alenaal_format "│  │  ├─ production.py  # Production overrides" --indent 4
+    alenaal_format "│  │  └─ testing.py     # Testing overrides" --indent 4
+    alenaal_format "│  └─ urls/" --indent 4
+    alenaal_format "│     ├─ __init__.py" --indent 4
+    alenaal_format "│     ├─ base.py        # Base URL patterns" --indent 4
+    alenaal_format "│     ├─ development.py # Dev-specific URLs" --indent 4
+    alenaal_format "│     ├─ production.py  # Production URLs" --indent 4
+    alenaal_format "│     └─ testing.py     # Testing URLs" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "PROJECT_NAME" --item --list --bold
+    alenaal_format "Default project name when not provided as argument" --indent 4
+
+    alenaal_format "WORK_DIRECTORY" --item --list --bold
+    alenaal_format "Default working directory for project creation" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Basic usage" --subsection --italic
+    alenaal_format "yarsin init myblog" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates 'myblog' project in current directory" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Custom location" --subsection --italic
+    alenaal_format "yarsin init --name api --dir ~/projects" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates 'api' project in ~/projects/api" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Using environment variables" --subsection --italic
+    alenaal_format "export PROJECT_NAME=backend" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export WORK_DIRECTORY=~/workspace" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin init" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates 'backend' project in ~/workspace/backend" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "With specific environment focus" --subsection --italic
+    alenaal_format "yarsin init --name ecommerce" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "cd ecommerce" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "DJANGO_SETTINGS_MODULE=ecommerce.settings.development python manage.py runserver" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Run development server with environment-specific settings" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Python 3.13+" --item --list
+    alenaal_format "Django 5.2+" --item --list
+    alenaal_format "django-admin in PATH" --item --list
+    alenaal_format "Write permissions in target directory" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Next Steps Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Next Steps:" --section --tip
+    alenaal_format "After initialization, you can:" --item
+
+    alenaal_format "1. Configure environment variables in base.py using django-environ" --item --list --indent 4
+    alenaal_format "2. Add environment-specific settings in respective files" --item --list --indent 4
+    alenaal_format "3. Set up URL patterns in urls/ files" --item --list --indent 4
+    alenaal_format "4. Create apps with: yarsin startapp <app_name>" --item --list --indent 4
+    alenaal_format "5. Run migrations: yarsin migrate" --item --list --indent 4
+    alenaal_format "6. Start development server: yarsin runserver" --item --list --indent 4
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for generating configuration files and messages.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _generate_setting_file
+#
+# Creates an environment-specific Django settings file.
+#
+# Args:
+#   $1 - environment: Environment name (development, production, testing)
+#   $2 - project_name: Name of the Django project
+#   $3 - project_dir: Base directory for the project
+#
+# Returns:
+#   0 - File created successfully
+#   1 - File creation failed
+# -----------------------------------------------------------------------------
+_generate_setting_file() {
+    local environment="$1"
+    local project_name="$2"
+    local project_dir="$3"
+
+    local filepath="${project_dir}/${project_name}/settings/${environment}.py"
+
+    # Ensure directory exists
+    if [[ ! -d "$project_dir" ]]; then
+        alenaal_error "Project directory does not exist: $project_dir"
+        return 1
+    fi
+
+    # Check if file already exists
+    if [[ -f "$filepath" ]]; then
+        alenaal_warning "Settings file already exists, skipping: $filepath"
+        return 0
+    fi
+
+    # Write the settings file
+    cat > "$filepath" << EOF
+"""${environment^} Environment Settings.
+
+Environment: ${environment}
+Inherits: .base
+Overrides: Base settings as needed for '${environment}' operations
+
+Key Responsibilities:
+    1. Environment-specific configuration overrides
+    2. Security settings appropriate for '${environment}'
+    3. Service endpoints and credentials for '${environment}'
+
+Configuration Method:
+    - Set DJANGO_SETTINGS_MODULE="${project_name}.settings.${environment}"
+    - Use environment variables for sensitive data
+    - Extend/override only what's necessary from base settings
+
+Note: This file is auto-generated. Manual edits may be overwritten.
+"""
+
+from .base import *  # pylint: disable=unused-wildcard-import, wildcard-import  # noqa
+
+# ${environment^} specific settings
+# Add your ${environment}-only settings below
+EOF
+
+   return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _generate_urls_file
+#
+# Creates an environment-specific URL configuration file.
+#
+# Args:
+#   $1 - environment: Environment name (development, production, testing)
+#   $2 - project_name: Name of the Django project
+#   $3 - project_dir: Base directory for the project
+#
+# Returns:
+#   0 - File created successfully
+#   1 - File creation failed
+# -----------------------------------------------------------------------------
+_generate_urls_file() {
+    local environment="$1"
+    local project_name="$2"
+    local project_dir="$3"
+
+    local filepath="${project_dir}/${project_name}/urls/${environment}.py"
+
+    # Ensure directory exists
+    if [[ ! -d "$project_dir" ]]; then
+        alenaal_error "Project directory does not exist: $project_dir"
+        return 1
+    fi
+
+    # Determine environment-specific info
+    local env_title="${environment^}"
+    local purpose=""
+
+    case "$environment" in
+        development) purpose="Full debugging and development tools" ;;
+        staging) purpose="QA testing with controlled access" ;;
+        production) purpose="Public endpoints with security hardening" ;;
+        testing) purpose="Automated test execution" ;;
+        *) purpose="Custom ${environment} configuration" ;;
+    esac
+
+    # Check if file already exists
+    if [[ -f "$filepath" ]]; then
+        alenaal_warning "URLs file already exists, skipping: $filepath"
+        return 0
+    fi
+
+    cat > "$filepath" <<EOF
+"""${env_title} URL Configuration.
+
+Environment: ${environment}
+Purpose: ${purpose}
+Inherits: .base.urlpatterns
+Security: Review access controls before deployment
+
+Usage: Add ${environment}-specific patterns below. All access should be logged.
+"""
+
+from .base import urlpatterns as base_urlpatterns
+
+
+urlpatterns = base_urlpatterns + [
+    # ${env_title}-specific patterns
+    # Apply appropriate authentication/authorization
+]
+EOF
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _project_successfully_initiated_message
+#
+# Displays a comprehensive success message with project structure and next steps.
+#
+# Args:
+#   $1 - project_name: Name of the created Django project
+#   $2 - project_dir: Directory where project was created
+#
+# Output:
+#   Formatted success message with ASCII tree and configuration instructions
+# -----------------------------------------------------------------------------
+_project_successfully_initiated_message() {
+    local project_name="$1"
+    local project_dir="$2"
+    local project_path="${project_dir}/${project_name}"
+
+    alenaal_newline
+    alenaal_format "Django Project Initialized Successfully!" --header --icon "✅"
+
+    # -------------------------------------------------------------------------
+    # Project Structure Display
+    # -------------------------------------------------------------------------
+    alenaal_format "Project Structure:" --section --example
+
+    alenaal_format "PROJECT_ROOT/" --item --bold
+    alenaal_format "├─ manage.py" --item --indent 4
+    
+    alenaal_format "├─ ${project_name}/" --item --bold --indent 4
+    alenaal_format "│  ├─ __init__.py" --item --indent 4
+    alenaal_format "│  ├─ asgi.py" --item --indent 4
+    alenaal_format "│  ├─ wsgi.py" --item --indent 4
+    
+    alenaal_format "│  ├─ settings/" --item --bold --indent 4
+    alenaal_format "│  │  ├─ __init__.py" --item --indent 4
+    alenaal_format "│  │  ├─ base.py        # Foundation settings" --item --indent 4
+    alenaal_format "│  │  ├─ development.py # Development overrides" --item --indent 4
+    alenaal_format "│  │  ├─ production.py  # Production overrides" --item --indent 4
+    alenaal_format "│  │  └─ testing.py     # Testing overrides" --item --indent 4
+    
+    alenaal_format "│  └─ urls/" --item --bold --indent 4
+    alenaal_format "│     ├─ __init__.py" --item --indent 4
+    alenaal_format "│     ├─ base.py        # Base URL patterns" --item --indent 4
+    alenaal_format "│     ├─ development.py # Dev-specific URLs" --item --indent 4
+    alenaal_format "│     ├─ production.py  # Production URLs" --item --indent 4
+    alenaal_format "│     └─ testing.py     # Testing URLs" --item --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Quick Start Configuration
+    # -------------------------------------------------------------------------
+    alenaal_format "Quick Start Configuration:" --section --tip
+
+    alenaal_format "1. Install django-environ for environment variable management:" --item --bold
+    alenaal_format "pip install django-environ" --indent 4 --icon "⇢"
+    alenaal_newline
+
+    alenaal_format "2. Update ${project_name}/settings/base.py with environment support:" --item --bold
+    alenaal_format "import environ" --indent 4
+    alenaal_format "from pathlib import Path" --indent 4
+    alenaal_newline
+    alenaal_format "# Initialize environ" --indent 4 --italic
+    alenaal_format "env = environ.Env()" --indent 4
+    alenaal_format "environ.Env.read_env()  # Reads .env file" --indent 4
+    alenaal_newline
+    alenaal_format "# Base directory" --indent 4 --italic
+    alenaal_format "BASE_DIR = Path(__file__).resolve().parent.parent.parent" --indent 4
+    alenaal_newline
+    alenaal_format "# Security" --indent 4 --italic
+    alenaal_format "SECRET_KEY = env.str('SECRET_KEY')" --indent 4
+    alenaal_format "DEBUG = env.bool('DEBUG', False)" --indent 4
+    alenaal_format "ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])" --indent 4
+    alenaal_newline
+    alenaal_format "# URLs" --indent 4 --italic
+    alenaal_format "ROOT_URLCONF = 'configs.urls.production'" --indent 4
+    alenaal_newline
+    alenaal_format "# Database" --indent 4 --italic
+    alenaal_format "DATABASES = {'default': env.db('DATABASE_URL')}" --indent 4
+    alenaal_newline
+    alenaal_format "# Static Files" --indent 4 --italic
+    alenaal_format "STATIC_URL = 'static/'" --indent 4
+    alenaal_format "STATIC_ROOT = env.path('STATIC_ROOT')" --indent 4
+    alenaal_format "STATICFILES_DIRS = [BASE_DIR / 'static',]" --indent 4
+    alenaal_newline
+
+    alenaal_format "3. Configure environment-specific files:" --item --bold
+    alenaal_format "Development (${project_name}/settings/development.py):" --indent 4
+    alenaal_format "ENVIRONMENT = env.str('ENVIRONMENT', 'production')" --indent 6
+    alenaal_format "ALLOWED_HOSTS = ['*']" --indent 6
+    alenaal_format "URL_CONFIG = {" --indent 6
+    alenaal_format "'development': 'configs.urls.development'," --indent 8
+    alenaal_format "'testing': 'configs.urls.testing'," --indent 8
+    alenaal_format "}" --indent 6
+    alenaal_format "ROOT_URLCONF = URL_CONFIG.get(ENVIRONMENT, 'configs.urls.development')" --indent 6
+    alenaal_newline
+    alenaal_format "Production (${project_name}/settings/production.py):" --indent 4
+    alenaal_format "DEBUG = False" --indent 6
+    alenaal_format "ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')" --indent 6
+    alenaal_format "SECURE_SSL_REDIRECT = True" --indent 6
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Next Steps
+    # -------------------------------------------------------------------------
+    alenaal_format "Next Steps:" --section --info
+
+    alenaal_format "Create your first app:" --item --bold --icon "📦"
+    alenaal_format "yarsin startapp core" --indent 4 --icon "⇢"
+    alenaal_newline
+
+    alenaal_format "Set up database:" --item --bold --icon "🗄️ "
+    alenaal_format "yarsin django-admin migrate" --indent 4 --icon "⇢"
+    alenaal_newline
+
+    alenaal_format "Start development server:" --item --bold --icon "🚀"
+    alenaal_format "yarsin django-admin runserver" --indent 4 --icon "⇢"
+    alenaal_newline
+
+    alenaal_format "Useful commands:" --item --bold --icon "📚"
+    alenaal_format "yarsin django-admin --help        # Show Django commands" --indent 4 --icon "⇢"
+    alenaal_format "yarsin startapp --help            # Help for creating apps" --indent 4 --icon "⇢"
+    alenaal_format "yarsin createapp --help           # Help for creating apps with proper configuration" --indent 4 --icon "⇢"
+    alenaal_newline
+
+    alenaal_format "Happy coding! 🎉" --bold
+    alenaal_newline
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

@@ -1,9 +1,9 @@
-ARG NGINX_VERSION=1.25-alpine
+ARG NGINX_TAG=stable-alpine
 
 #########################################################
 # Set the base image to use for subsequent instructions #
 #########################################################
-FROM nginx:${NGINX_VERSION} AS nginx
+FROM nginx:${NGINX_TAG} AS nginx
 
 
 #########################################################

@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: psql
+# Description: PostgreSQL interactive terminal wrapper with environment awareness
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="psql"
+    [category]="database"
+    [description]="PostgreSQL interactive terminal wrapper with environment awareness"
+    [usage]="yarsin psql [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="psql postgresql-client"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Connection Configuration
+# -----------------------------------------------------------------------------
+# These environment variables are required for PostgreSQL connection.
+# They can be set via environment variables to match container configuration.
+# -----------------------------------------------------------------------------
+
+# Validate required environment variables
+: "${POSTGRES_USER:?Error: POSTGRES_USER environment variable is not set}"
+: "${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD environment variable is not set}"
+: "${POSTGRES_HOST:?Error: POSTGRES_HOST environment variable is not set}"
+: "${POSTGRES_PORT:?Error: POSTGRES_PORT environment variable is not set}"
+: "${POSTGRES_DB:?Error: POSTGRES_DB environment variable is not set}"
+
+# Build DATABASE_URL from environment variables
+# Format: postgres://user:password@host:port/database
+export DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+
+# Disable psql history saving (prevents permission errors in containers)
+export PSQL_HISTORY=/dev/null
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the psql command.
+#
+# Description:
+#   Wrapper around the PostgreSQL interactive terminal (psql) that automatically
+#   uses environment variables for connection parameters. This allows users to
+#   connect to PostgreSQL databases without manually specifying connection
+#   details each time.
+#
+# Features:
+#   - Automatically constructs DATABASE_URL from POSTGRES_* environment vars
+#   - Maintains psql's full functionality with all standard options
+#   - Forwards all arguments directly to psql
+#   - Provides helpful error messages for missing environment variables
+#
+# Arguments:
+#   $@ - All arguments are passed directly to the psql command
+#
+# Returns:
+#   Exit code from the psql command
+#
+# Examples:
+#   # Interactive PostgreSQL shell
+#   yarsin psql
+#
+#   # Run a query
+#   yarsin psql -c "SELECT * FROM users;"
+#
+#   # Connect to specific database (overrides POSTGRES_DB)
+#   yarsin psql -d myapp_test
+#
+#   # Execute SQL file
+#   yarsin psql -f /path/to/script.sql
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Execute psql
+    # -------------------------------------------------------------------------
+    # Pass all arguments directly to psql
+    # The DATABASE_URL environment variable provides default connection parameters
+    psql -d "${DATABASE_URL}" "$@"
+    local exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
+        alenaal_error "psql exited with code ${exit_code}"
+    fi
+    
+    return $exit_code
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

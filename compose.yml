@@ -1,98 +1,150 @@
 services:
-  # Runs the Nginx reverse proxy server that forwards incoming HTTP requests
-  # to the Django application container.
+  # Nginx Reverse Proxy Service
+  # ---------------------------
+  # Routes HTTP traffic to the Django API and serves static/media files.
   web:
     build:
-      context: ./docker/nginx           # Build context for the Nginx image.
-      dockerfile: Dockerfile            # Dockerfile used to build the image.
-      target: development-run-stage     # Build stage optimized for development.
-    container_name: djansin_web         # Name assigned to the Nginx container.
+      context: ./docker/nginx                         # Directory containing Nginx Dockerfile
+      dockerfile: Dockerfile                          # Dockerfile name
+      target: development-run-stage                   # Multi-stage build target for development
+      args:
+        - NGINX_TAG=${NGINX_VERSION}-alpine           # Base image tag
+    container_name: ${COMPOSE_PROJECT_NAME}_web       # Container identifier
     env_file:
-      - ./envs/.env.nginx               # Environment variables loaded for Nginx.
+      - ./envs/.env.nginx                             # Nginx-specific environment variables
     depends_on:
-      - api                             # Ensures the API service starts before Nginx.
+      api:
+        condition: service_healthy                    # Wait for API health check to pass
     volumes:
-      - .:/app:z                        # Mounts the project directory into the container.
-      - ./docker/nginx/configs/development/:/etc/nginx/conf.d/  # Nginx config files.
-      - api_staticfiles:${STATIC_ROOT}  # Provides access to Django collected static files.
-      - api_mediafiles:${MEDIA_ROOT}    # Provides access to uploaded media files.
+      - .:/app:z                                      # Mount project root with SELinux labeling
+      - ./docker/nginx/configs/development/:/etc/nginx/conf.d/:ro  # Nginx configuration (read-only)
+      - api_staticfiles:${STATIC_ROOT}:ro             # Static files volume (read-only)
+      - api_mediafiles:${MEDIA_ROOT}:ro               # Media files volume (read-only)
     networks:
-      - dsnet                           # Connects the container to the shared network.
+      - dsnet                                         # Attach to project network
     ports:
-      - "${SERVER_PORT}:80"             # Maps host port ${SERVER_PORT} to container port 80.
+      - "${SERVER_PORT}:80"                           # Host:Container port mapping
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]                    # Validate Nginx configuration syntax
+      interval: 10s
+      timeout: 10s
+      retries: 3
 
-  # Runs the Django application server (development mode),
-  # including app code, custom commands, and static/media file handling.
+  # Django Application Service
+  # --------------------------
+  # Core backend service running Django development server.
   api:
     build:
-      context: .                          # Project root as build context.
-      dockerfile: ./docker/django/Dockerfile  # Dockerfile for Django.
-      target: development-run-stage       # Development build stage for Django.
+      context: .                                      # Project root as build context
+      dockerfile: ./docker/django/Dockerfile          # Path to Django Dockerfile
+      target: development-run-stage                   # Development runtime stage
       args:
-        - BUILD_ENVIRONMENT=development   # Build argument passed to Dockerfile.
-        - WORK_DIRECTORY=/app             # Working directory inside the container.
-    container_name: djansin_api           # Name assigned to the Django container.
+        - PYTHON_TAG=${PYTHON_VERSION}-slim-bookworm  # Python base image
+        - BUILD_ENVIRONMENT=development               # Build-time environment flag
+        - WORK_DIRECTORY=/app                         # Working directory inside container
+        - PYPI_MIRROR=${PYPI_MIRROR}                  # PyPI mirror URL
+        - APT_MIRROR=${APT_MIRROR}                    # APT package mirror URL
+        - SKIP_SEC_EXPIRY=${SKIP_SEC_EXPIRY}          # Bypass APT validity checks
+    container_name: ${COMPOSE_PROJECT_NAME}_api       # Container identifier
     environment:
-      - PROJECT_NAME=${PROJECT_NAME}      # Name of the Django project.
-      - STATIC_ROOT=${STATIC_ROOT}        # Path where Django stores collected static files.
-      - MEDIA_ROOT=${MEDIA_ROOT}          # Path where Django stores media uploads.
-      - APPS_DIRECTORY=${APPS_DIRECTORY}  # Folder where Django apps are located.
-      - PYTHONUSERBASE=/packages          # User-level Python package directory.
-      - USERNAME=${USERNAME}              # Default username used for internal scripts.
+      - PROJECT_NAME=${PROJECT_NAME}                  # Django project configuration directory
+      - STATIC_ROOT=${STATIC_ROOT}                    # Absolute path for collected static files
+      - MEDIA_ROOT=${MEDIA_ROOT}                      # Absolute path for user uploads
+      - APP_DIRECTORY=${APP_DIRECTORY}                # Project-specific applications
+      - EXTRAS_DIRECTORY=${EXTRAS_DIRECTORY}          # Extra contributed apps
+      - PACK_DIRECTORY=${PACK_DIRECTORY}              # Reusable packages
+      - PYTHONUSERBASE=/packages                      # User-level Python package installation path
+      - USERNAME=${USERNAME}                          # Default container user
     env_file:
-      - ./envs/.env.api                   # Loads environment variables for the Django app.
-    command: "yarsin runserver"           # Command to start Django’s development server.
+      - ./envs/.env.api                               # Django application environment variables
+    command: "yarsin runserver -c"                    # Custom wrapper for Django development server
     depends_on:
-      - db                                # Ensures database is ready before Django starts.
+      db:
+        condition: service_healthy                    # Wait for database health check
     volumes:
-      - .:/app:z                          # Mounts application source code.
-      - ./docker/django/scripts/sources/:/usr/local/bin/sources/:z  # Custom scripts for Django.
-      - api_staticfiles:${STATIC_ROOT}    # Shared static files volume.
-      - api_mediafiles:${MEDIA_ROOT}      # Shared media files volume.
-      - api_packages:/packages/           # Stores installed Python packages persistently.
+      - .:/app:z                                      # Application source code with hot-reload
+      - ./docker/django/scripts/yarsin-libs/:/usr/local/bin/yarsin-libs/:ro  # Custom scripts (read-only)
+      - api_staticfiles:${STATIC_ROOT}                # Shared static files volume
+      - api_mediafiles:${MEDIA_ROOT}                  # Shared media files volume
+      - api_packages:/packages/                       # Persistent Python packages
     networks:
-      - dsnet                             # Connects the container to the shared network.
+      - dsnet                                         # Project network
     expose:
-      - "8000"                            # Makes port 8000 available to linked containers.
+      - "8000"                                        # Internal port exposure for other services
+    healthcheck:
+      test: ["CMD", "yarsin", "healthcheck"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 3s
 
-  # Runs pgAdmin, a web dashboard used for managing PostgreSQL databases.
+  # pgAdmin Database Management Service
+  # -----------------------------------
+  # Web-based PostgreSQL administration interface.
   pgadmin:
-    image: dpage/pgadmin4                 # Official pgAdmin image.
-    container_name: djansin_pgadmin       # Name for the pgAdmin container.
+    image: ${PGADMIN_TAG}                             # Official pgAdmin4 Docker image
+    container_name: ${COMPOSE_PROJECT_NAME}_pgadmin   # Container identifier
     env_file:
-      - ./envs/.env.pgadmin               # Environment variables for pgAdmin.
+      - ./envs/.env.pgadmin                           # pgAdmin configuration (email/password)
     depends_on:
-      - db                                # Ensures pgAdmin starts after the database.
+      db:
+        condition: service_healthy                    # Ensure database is ready
     volumes:
-      - pgadmin_data:/var/lib/pgadmin/    # Stores pgAdmin metadata persistently.
+      - pgadmin_data:/var/lib/pgadmin/                # Persistent pgAdmin configuration
     networks:
-      - dsnet                             # Connects pgAdmin to the shared network.
+      - dsnet                                         # Project network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Runs the PostgreSQL database server used by Django and pgAdmin.
+  # PostgreSQL Database Service
+  # ---------------------------
+  # Primary relational database for the application.
   db:
     build:
-      context: ./docker/postgres          # Build context for PostgreSQL.
-      dockerfile: Dockerfile              # Dockerfile for PostgreSQL image.
-      target: development-run-stage       # Development stage of the Postgres image.
-    container_name: djansin_db            # Name for the PostgreSQL container.
+      context: ./docker/postgres                      # PostgreSQL custom build directory
+      dockerfile: Dockerfile                          # Dockerfile name
+      target: development-run-stage                   # Development runtime stage
+      args:
+        - POSTGRES_TAG=${POSTGRES_VERSION}-bookworm   # PostgreSQL version with Debian base
+    container_name: ${COMPOSE_PROJECT_NAME}_db        # Container identifier
     environment:
-      - USERNAME=${USERNAME}              # Default username used for internal scripts.
+      - USERNAME=${USERNAME}                          # Default container user
     env_file:
-      - ./envs/.env.db                    # Environment variables (user, password, database).
+      - ./envs/.env.db                                # Database credentials and settings
     volumes:
-      - ./docker/postgres/initdb/:/docker-entrypoint-initdb.d/ # SQL scripts run on first startup.
-      - ./backups/:/backups/              # Host directory for database backups.
-      - db_data:/var/lib/postgresql/data/ # Persistent database storage.
+      - ./docker/postgres/initdb/:/docker-entrypoint-initdb.d/:ro  # Initialization scripts
+      - ./backups/:/backups/:rw                       # Host-accessible backup directory
+      - ./docker/postgres/scripts/yarsin-libs/:/usr/local/bin/yarsin-libs/:ro # Database utilities
+      - db_data:/var/lib/postgresql                   # Persistent database storage
     networks:
-      - dsnet                             # Connects the database to the shared network.
+      - dsnet                                         # Project network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
+# Network Configuration
+# ---------------------
 networks:
   dsnet:
-    driver: bridge                        # Defines a bridge network for container communication.
+    driver: bridge                                    # Default bridge network for inter-service communication
+    name: ${COMPOSE_PROJECT_NAME}_network             # Explicit network naming
 
+# Persistent Volume Definitions
+# -----------------------------
 volumes:
-  db_data: {}                             # Persistent storage for PostgreSQL data.
-  api_staticfiles: {}                     # Stores Django collected static files.
-  api_mediafiles: {}                      # Stores uploaded media files.
-  api_packages: {}                        # Stores installed Python packages for persistence.
-  pgadmin_data: {}                        # Stores pgAdmin metadata.
+  db_data:                                            # PostgreSQL database files
+    name: ${COMPOSE_PROJECT_NAME}_db_data
+  api_staticfiles:                                    # Django collected static assets
+    name: ${COMPOSE_PROJECT_NAME}_staticfiles
+  api_mediafiles:                                     # User-uploaded media files
+    name: ${COMPOSE_PROJECT_NAME}_mediafiles
+  api_packages:                                       # Python package cache
+    name: ${COMPOSE_PROJECT_NAME}_packages
+  pgadmin_data:                                       # pgAdmin configuration and data
+    name: ${COMPOSE_PROJECT_NAME}_pgadmin_data

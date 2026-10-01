@@ -1,0 +1,606 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: healthcheck
+# Description: Django application health checks for container orchestration
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Command Metadata
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="healthcheck"
+    [category]="django"
+    [description]="Health checks for Django applications in container environments"
+    [usage]="yarsin healthcheck [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="python django-admin curl"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# Default Configuration Values
+# -----------------------------------------------------------------------------
+# These values can be overridden by environment variables. They control the
+# behavior of all health checks including timeouts and connection parameters.
+# -----------------------------------------------------------------------------
+
+# Server port for the Django development server. Default is Django's default.
+readonly SERVER_PORT="${SERVER_PORT:-8000}"
+
+# Timeout in seconds for network operations. Prevents hanging checks.
+readonly TIMEOUT="${HEALTHCHECK_TIMEOUT:-3}"
+
+# Health endpoints to try in order of preference. The first responsive
+# endpoint determines success for the responsiveness check.
+readonly HEALTH_ENDPOINTS=(
+    "/healthcheck/"  # Custom health endpoint (preferred)
+    "/admin/"        # Django admin (requires auth but responds)
+    "/"              # Root URL (last resort)
+)
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main health check dispatcher function.
+#
+# Description:
+#   Performs comprehensive health checks for Django applications with silent,
+#   machine-readable output designed for container orchestration environments
+#   (Docker, Kubernetes, Nomad). Health status is communicated exclusively
+#   via exit codes to support automated monitoring systems.
+#
+# Checks performed (configurable via command-line flags):
+#   1. Server port listening status (always performed)
+#   2. Server HTTP responsiveness (--responding)
+#   3. Django importability and configuration (--importability)
+#   4. Django system checks (--system-checks)
+#   5. Database connectivity (--database)
+#   6. Pending migrations (--migrations)
+#
+# Environment Variables:
+#   SERVER_PORT: Django development server port (default: 8000)
+#   HEALTHCHECK_TIMEOUT: Request timeout in seconds (default: 3)
+#
+# Options:
+#   -r, --responding       Check server HTTP responsiveness
+#   -i, --importability    Check Django importability and configuration
+#   -s, --system-checks    Run Django system checks with --deploy flag
+#   -d, --database         Test database connectivity for all connections
+#   -m, --migrations       Check for pending database migrations
+#   -h, --help             Display this help message
+#
+# Returns:
+#   0: All requested checks passed
+#   1: One or more checks failed
+#
+# Design Philosophy:
+#   - Silent operation: No stdout during normal operation
+#   - Machine-readable: Exit codes are the sole communication mechanism
+#   - Progressive checks: Port check is mandatory, others optional
+#   - Comprehensive: Covers network, Python, database, and schema layers
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Flag Initialization
+    # -------------------------------------------------------------------------
+    # All optional checks default to false and are enabled via flags.
+    # Port listening check is always performed and cannot be disabled.
+    # -------------------------------------------------------------------------
+    local check_responding=false
+    local check_importability=false
+    local check_system=false
+    local check_database=false
+    local check_migrations=false
+    
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    # Processes command-line flags to determine which health checks to run.
+    # Each flag enables one or more optional checks beyond the mandatory
+    # port listening check.
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -r|--responding)
+                check_responding=true
+                shift
+                ;;
+
+            -i|--importability)
+                check_importability=true
+                shift
+                ;;
+
+            -s|--system-checks)
+                check_system=true
+                shift
+                ;;
+
+            -d|--database)
+                check_database=true
+                shift
+                ;;
+
+            -m|--migrations)
+                check_migrations=true
+                shift
+                ;;
+
+            *)
+                alenaal_error "Unknown option: '$1'"
+                alenaal_info "Use 'yarsin healthcheck --help' for usage information"
+                return 1
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Mandatory Port Listening Check
+    # -------------------------------------------------------------------------
+    # Always performed regardless of flags. This is the most fundamental
+    # check, verifying that a process is actually listening on the port.
+    # -------------------------------------------------------------------------
+    if ! _check_port_listening "${SERVER_PORT}"; then
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Optional Health Checks
+    # -------------------------------------------------------------------------
+    # Execute additional checks based on user-provided flags. Each check
+    # returns 0 on success, 1 on failure. Results are aggregated to produce
+    # the final exit code.
+    # -------------------------------------------------------------------------
+    if [[ "$check_responding" == true ]]; then
+        if ! _check_server_responding "${SERVER_PORT}" "${TIMEOUT}"; then
+            return 1
+        fi
+    fi
+
+    if [[ "$check_importability" == true ]]; then
+        if ! _check_django_importability; then
+            return 1
+        fi
+    fi
+
+    if [[ "$check_system" == true ]]; then
+        if ! _check_django_system; then
+            return 1
+        fi
+    fi
+
+    if [[ "$check_database" == true ]]; then
+        if ! _check_database_connectivity; then
+            return 1
+        fi
+    fi
+
+    if [[ "$check_migrations" == true ]]; then
+        if ! _check_pending_migrations; then
+            return 1
+        fi
+    fi
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays detailed help information for the healthcheck command.
+#
+# Description:
+#   Shows comprehensive documentation including command purpose, available
+#   options, environment variables, and examples. Uses alenaal formatting
+#   for consistent and visually appealing output.
+#
+# Output:
+#   Formatted help text printed to stdout with icons and color formatting.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "healthcheck - Django Application Health Checks" --header --icon "🏥"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Performs comprehensive health checks with silent, machine-readable output" --item
+    alenaal_format "designed for container orchestration environments." --item
+    alenaal_newline
+
+    alenaal_format "Health status is communicated exclusively via exit codes:" --item
+    alenaal_format "0 - All requested checks passed" --item --list --indent 4
+    alenaal_format "1 - One or more checks failed" --item --list --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "SERVER_PORT=8080 yarsin healthcheck [OPTIONS]" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+
+    alenaal_format "Port Listening Check (mandatory)" --subsection
+    alenaal_format "(Always performed, cannot be disabled)" --indent 4 --italic
+    alenaal_format "Verifies that a process is listening on port \${SERVER_PORT}" --indent 4
+    alenaal_newline
+
+    alenaal_format "Optional Checks:" --subsection
+
+    alenaal_format  --item --list --bold --indent 4 -- "-r, --responding"
+    alenaal_format "Check server HTTP responsiveness by probing health endpoints" --indent 5
+    alenaal_format "Attempts: ${HEALTH_ENDPOINTS[*]}" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-i, --importability"
+    alenaal_format "Verify Django can be imported and configured correctly" --indent 5
+    alenaal_format "Validates Python environment and settings module" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-s, --system-checks"
+    alenaal_format "Run Django system checks with --deploy flag" --indent 5
+    alenaal_format "Identifies security and performance issues" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-d, --database"
+    alenaal_format "Test connectivity to all configured database connections" --indent 5
+    alenaal_format "Validates database servers are reachable and credentials work" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-m, --migrations"
+    alenaal_format "Check for pending database migrations" --indent 5
+    alenaal_format "Identifies schema drift between code and database" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format --item --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "SERVER_PORT" --item --list --bold
+    alenaal_format "Port for the Django development server (default: 8000)" --indent 4
+
+    alenaal_format "HEALTHCHECK_TIMEOUT" --item --list --bold
+    alenaal_format "Request timeout in seconds (default: 3)" --indent 4
+
+    alenaal_format "DJANGO_SETTINGS_MODULE" --item --list --bold
+    alenaal_format "Dotted path to Django settings module" --indent 4
+    alenaal_format "Defaults to 'configs.settings' if not set" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Basic port listening check" --subsection --italic
+    alenaal_format "yarsin healthcheck" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Check if server is running on port 8000" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Full health check" --subsection --italic
+    alenaal_format "yarsin healthcheck --responding --importability --system-checks --database --migrations" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Comprehensive health check for production deployments" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Database-only check" --subsection --italic
+    alenaal_format "yarsin healthcheck --database --migrations" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Focus on database connectivity and schema status" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Custom port and timeout" --subsection --italic
+    alenaal_format "SERVER_PORT=8080 HEALTHCHECK_TIMEOUT=5 yarsin healthcheck --responding" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Check server on port 8080 with 5 second timeout" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Container Integration Notes
+    # -------------------------------------------------------------------------
+    alenaal_format "Container Integration:" --section --tip
+    alenaal_format "Docker Healthcheck:" --item --list --bold
+    alenaal_format 'healthcheck:' --indent 4
+    alenaal_format 'test: ["CMD", "yarsin", "healthcheck", "--responding", "--database"]' --indent 5
+    alenaal_format 'interval: 30s' --indent 5
+    alenaal_format 'timeout: 3s' --indent 5
+    alenaal_format 'retries: 3' --indent 5
+    alenaal_format 'start_period: 40' --indent 5
+
+    alenaal_format "Kubernetes Liveness Probe:" --item --list --bold
+    alenaal_format 'livenessProbe:' --indent 4
+    alenaal_format 'exec:' --indent 5
+    alenaal_format 'command: ["yarsin", "healthcheck", "--responding"]' --indent 6
+    alenaal_format 'initialDelaySeconds: 30' --indent 5
+    alenaal_format 'periodSeconds: 10' --indent 5
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions that implement specific health checks.
+# These functions are prefixed with underscore to indicate they are internal.
+# All functions are designed to be silent and return appropriate exit codes.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _check_port_listening
+#
+# Checks if the server port is in LISTEN state.
+#
+# Description:
+#   Verifies that a process is actively listening on the specified port.
+#   This is more fundamental than HTTP responsiveness as it checks TCP-level
+#   availability without requiring the HTTP server to be fully functional.
+#
+# Args:
+#   $1 - port: Server port number to check
+#
+# Returns:
+#   0 if port is in LISTEN state
+#   1 if port is not listening or connection times out
+#
+# Implementation:
+#   Uses bash's built-in /dev/tcp redirection which creates a TCP connection.
+#   This is more efficient than external tools like netstat or ss.
+# -----------------------------------------------------------------------------
+_check_port_listening() {
+    local port="$1"
+    
+    if timeout "${TIMEOUT}" bash -c "echo >/dev/tcp/localhost/${port}" 2>/dev/null; then
+        return 0
+    fi
+
+    alenaal_debug "Port ${port} is not in LISTEN state"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Function: _check_server_responding
+#
+# Tests server HTTP responsiveness by attempting to connect to health endpoints.
+#
+# Description:
+#   Verifies that the server accepts HTTP connections and returns successful
+#   responses. Attempts to connect to a list of health endpoints in order of
+#   preference. The first successful endpoint determines success.
+#
+# Args:
+#   $1 - port: Server port number
+#   $2 - timeout: Request timeout in seconds
+#
+# Returns:
+#   0 if any endpoint responds successfully
+#   1 if all endpoints fail to respond
+#
+# Note:
+#   The endpoint list is configurable via HEALTH_ENDPOINTS array.
+# -----------------------------------------------------------------------------
+_check_server_responding() {
+    local port="$1"
+    local timeout="$2"
+    
+    for endpoint in "${HEALTH_ENDPOINTS[@]}"; do
+        if curl -s -f -o /dev/null \
+           --max-time "${timeout}" \
+           "http://localhost:${port}${endpoint}" 2>/dev/null; then
+            return 0
+        fi
+    done
+    
+    alenaal_debug "Server not responding on port ${port}"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Function: _check_django_importability
+#
+# Verifies Django importability and basic configuration.
+#
+# Description:
+#   Checks that Django can be imported and configured with the specified
+#   settings module. This fundamental check ensures the Python environment
+#   is properly set up before more advanced checks are attempted.
+#
+# Returns:
+#   0: Django successfully imported and configured
+#   1: Django import or configuration failed
+#
+# Implementation:
+#   Uses a Python one-liner to import Django and call django.setup().
+#   All output is suppressed to maintain silent operation.
+# -----------------------------------------------------------------------------
+_check_django_importability() {
+    python3 - <<'EOF' 2>/dev/null || return 1
+import os
+import sys
+import django
+
+# Configure Django settings module
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'configs.settings')
+
+try:
+    django.setup()
+except Exception:
+    sys.exit(1)
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _check_django_system
+#
+# Runs Django system checks with deployment-focused validation.
+#
+# Description:
+#   Executes Django's built-in system checks with the --deploy flag,
+#   performing security and performance checks appropriate for production
+#   environments. This helps identify misconfigurations before deployment.
+#
+# Returns:
+#   0: All system checks passed
+#   1: System checks failed or errors detected
+#
+# Note:
+#   The --deploy flag enables additional checks that are not run by default.
+# -----------------------------------------------------------------------------
+_check_django_system() {
+    python3 - <<'EOF' 2>/dev/null || return 1
+import os
+import sys
+import django
+from django.core.management import execute_from_command_line
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'configs.settings')
+django.setup()
+
+try:
+    execute_from_command_line(['manage.py', 'check', '--deploy'])
+except SystemExit as e:
+    if e.code != 0:
+        sys.exit(1)
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _check_database_connectivity
+#
+# Tests connectivity to all configured database connections.
+#
+# Description:
+#   Attempts to establish a cursor connection to each database configured in
+#   Django's DATABASES setting. Validates that database servers are reachable
+#   and credentials are correct for all connections, not just 'default'.
+#
+# Returns:
+#   0: All database connections successful
+#   1: One or more database connections failed
+# -----------------------------------------------------------------------------
+_check_database_connectivity() {
+    python3 - <<'EOF' 2>/dev/null || return 1
+import os
+import sys
+import django
+from django.db import connections
+from django.db.utils import OperationalError
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'configs.settings')
+django.setup()
+
+# Test each database connection
+for conn_name in connections:
+    try:
+        connections[conn_name].cursor()
+    except OperationalError:
+        sys.exit(1)
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _check_pending_migrations
+#
+# Checks for unapplied database migrations.
+#
+# Description:
+#   Examines the migration history and identifies any migrations that have
+#   been created but not yet applied to the database. This check helps
+#   prevent schema inconsistencies between code and database.
+#
+# Returns:
+#   0: No pending migrations
+#   1: Pending migrations detected or check failed
+#
+# Note:
+#   This check does not apply migrations, only detects pending ones.
+# -----------------------------------------------------------------------------
+_check_pending_migrations() {
+    python3 - <<'EOF' 2>/dev/null || return 1
+import os
+import sys
+import django
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'configs.settings')
+django.setup()
+
+try:
+    from django.db.migrations.executor import MigrationExecutor
+    from django.db import connection
+    
+    executor = MigrationExecutor(connection)
+    plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+    
+    if plan:
+        sys.exit(1)
+except Exception:
+    sys.exit(1)
+EOF
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

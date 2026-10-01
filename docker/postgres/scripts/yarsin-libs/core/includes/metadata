@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Metadata Handler for YARSIN Commands
+# =============================================================================
+# Description: Provides metadata access functions for YARSIN commands.
+#              This file is meant to be sourced by command scripts to expose
+#              their metadata to the YARSIN dispatcher.
+#
+# Usage:
+#   In your command script, after defining CMD_METADATA, source this file:
+#     source "${YARSIN_CORE_PATH}/includes/metadata" "$@"
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of this script. This file is designed to be sourced,
+# not executed directly. If someone tries to run it directly, show an error.
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    alenaal_error "This file is meant to be sourced, not executed directly."
+    exit 1
+fi
+
+
+# =============================================================================
+# METADATA ACCESS FUNCTIONS
+# =============================================================================
+# These functions provide access to the command metadata defined in CMD_METADATA.
+# They are used by the YARSIN dispatcher for command discovery and help display.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: metadata
+#
+# Returns all command metadata as key=value pairs.
+#
+# Description:
+#   Iterates through all keys in the CMD_METADATA associative array and prints
+#   them in key=value format, one per line. This allows the dispatcher to
+#   easily parse command information for discovery and categorization.
+#
+# Globals:
+#   CMD_METADATA - Associative array containing command metadata
+#
+# Output:
+#   Prints each metadata entry as "key=value" on a separate line
+#
+# Example:
+#   $ metadata
+#   name=backup
+#   category=database
+#   description=PostgreSQL backup utilities
+#   usage=yarsin backup <subcommand> [OPTIONS]
+#   version=1.0.0
+#   requires=postgresql-client
+# -----------------------------------------------------------------------------
+metadata() {
+    local key
+    for key in "${!CMD_METADATA[@]}"; do
+        printf "%s=%s\n" "$key" "${CMD_METADATA[$key]}"
+    done
+}
+
+# -----------------------------------------------------------------------------
+# Function: metadata_value
+#
+# Returns the value of a specific metadata field.
+#
+# Description:
+#   Retrieves the value for a given metadata key from CMD_METADATA.
+#   Useful when the dispatcher needs a specific piece of information
+#   without parsing all metadata.
+#
+# Args:
+#   $1 - key: The metadata field name to retrieve
+#
+# Output:
+#   Prints the value of the requested metadata field
+#
+# Returns:
+#   0 - Success, value found and printed
+#   1 - Key not found or CMD_METADATA not properly defined
+#
+# Example:
+#   $ metadata_value "name"
+#   backup
+# -----------------------------------------------------------------------------
+metadata_value() {
+    local key="$1"
+    local value="${CMD_METADATA[$key]:-}"
+    if [[ -n $value ]]; then
+        echo -n "$value"
+        return 0
+    fi
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Function: check_requirements
+#
+# Verifies that all required commands are available in the system.
+#
+# Description:
+#   Checks the 'requires' field in CMD_METADATA and ensures each required
+#   command is available in the PATH. If any requirements are missing,
+#   it reports them and returns an error. This helps prevent cryptic errors
+#   when a required tool is not installed.
+#
+# Globals:
+#   CMD_METADATA - Associative array containing command metadata
+#
+# Output:
+#   If requirements are missing, prints error messages via alenaal_error
+#
+# Returns:
+#   0 - All requirements satisfied
+#   1 - One or more requirements missing
+#
+# Example:
+#   if ! check_requirements; then
+#       echo "Please install missing requirements"
+#       exit 1
+#   fi
+# -----------------------------------------------------------------------------
+check_requirements() {
+    local missing=()
+    local reqs="${CMD_METADATA[requires]:-}"
+    
+    for req in $reqs; do
+        if ! command -v "$req" &>/dev/null; then
+            missing+=("$req")
+        fi
+    done
+    
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        alenaal_error "Missing requirements: ${missing[*]}"
+        return 1
+    fi
+    return 0
+}

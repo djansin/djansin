@@ -330,4 +330,13 @@ source ./yarsin startapp core user
 
   </div>
 
+---
+
+## 💡 چگونه
+
+- [چگونه ریزبِرْکاها را در یک پوشه بِتایِسیم (سازماندهی کنیم)؟](docs/using_an_apps_folder.md)
+- [چگونه فایل‌های ایستا و رسانه را بِتایِسیم (سازماندهی کنیم)؟](docs/handling_django_static_and_media_files.md)
+- [چگونه پروژه اِمان را بِمِلّیکیم (ملی‌ساز) و بِمِلَلِکیم (بین‌المللی‌سازی کنیم)؟](docs/internationalization_and_iocalization.md)
+- [چگونه اِطَلِعان‌های آسیباوَر (اطلاعات حساس) را با غَیِرْپَذیر مَحِلْناک (متغیرهای محلی) بِکیاسیم (هندل کنیم)؟](docs/using_env_file_in_django.md)
+
 </div>

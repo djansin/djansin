@@ -1,0 +1,1087 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: createapp
+# Description: Create new Django applications with proper configuration
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="createapp"
+    [category]="django"
+    [description]="Create new Django applications with proper configuration"
+    [usage]="yarsin createapp <app_name> [app_name2 ...] [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="python django-admin"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+
+# -----------------------------------------------------------------------------
+# App Directory Configuration
+# -----------------------------------------------------------------------------
+# Maps app types to their default directory names.
+# These can be overridden via environment variables.
+# -----------------------------------------------------------------------------
+declare -rA APP_DIRECTORIES=(
+    [default]="${APP_DIRECTORY:-apps}"
+    [package]="${PACK_DIRECTORY:-djansin}"
+    [extras]="${EXTRAS_DIRECTORY:-extras}"
+)
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the startapp command.
+#
+# Description:
+#   Creates one or more Django applications with a comprehensive file structure:
+#   - Standard Django app files (admin.py, apps.py, models.py, etc.)
+#   - Proper migrations directory with __init__.py
+#   - Auto-configured AppConfig with correct Python import path
+#   - Scaffolded boilerplate with helpful comments
+#
+# Arguments:
+#   app_names - One or more application names to create
+#
+# Options:
+#   -n, --name NAME     Application name (can be used multiple times)
+#   -d, --dir DIRECTORY Target directory for apps (default: ./apps/)
+#   -e, --extras        Create app in extra contributed apps directory
+#   -p, --package       Create app in package directory
+#   -h, --help          Display this help message
+#
+# Environment Variables:
+#   WORK_DIRECTORY      Base project directory (default: current directory)
+#   APP_DIRECTORY       Directory name for Django apps (default: 'apps')
+#   PACK_DIRECTORY      Directory name for package apps (default: 'djansin')
+#   EXTRAS_DIRECTORY    Directory name for extra contributed apps (default: 'extras')
+#
+# Returns:
+#   0 - All applications created successfully
+#   1 - Invalid options or missing arguments
+#   2 - Some applications failed to create
+# -----------------------------------------------------------------------------
+main() {
+    local app_names=()
+    local app_dir=""
+    local app_type="default"
+
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -d|--dir)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--dir' requires a directory argument"
+                    return 1
+                fi
+                app_dir="$(_normalize_path "$2")"
+                shift 2
+                ;;
+
+            -n|--name)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--name' requires an argument"
+                    return 1
+                fi
+                app_names+=("$2")
+                shift 2
+                ;;
+
+            -e|--extras)
+                app_type="extras"
+                shift
+                ;;
+
+            -p|--package)
+                app_type="package"
+                shift
+                ;;
+
+            --)
+                shift
+                while [[ $# -gt 0 ]]; do
+                    app_names+=("$1")
+                    shift
+                done
+                break
+                ;;
+
+            -*)
+                alenaal_error "Unknown option: '$1'"
+                alenaal_suggestion "Use 'yarsin createapp --help' for usage information"
+                return 1
+                ;;
+
+            *)
+                app_names+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Validate Inputs
+    # -------------------------------------------------------------------------
+    if [[ ${#app_names[@]} -eq 0 ]]; then
+        alenaal_error "No application names provided."
+        alenaal_suggestion "Usage: yarsin createapp <app_name> [app_name2 ...]"
+        alenaal_suggestion "Use 'yarsin createapp --help' for more information"
+        return 1
+    fi
+
+    # Set default app directory if not specified
+    if [[ -z "${app_dir}" ]]; then
+        app_dir="$(_get_app_dir "${app_type}")"
+    fi
+
+    # Ensure WORK_DIRECTORY is set
+    local work_dir="${WORK_DIRECTORY:-$(pwd)}"
+
+    # -------------------------------------------------------------------------
+    # Create Applications
+    # -------------------------------------------------------------------------
+    local success_count=0
+    local fail_count=0
+
+    alenaal_newline
+    for app_name in "${app_names[@]}"; do
+        local normalized_name
+        local app_path
+        normalized_name="$(_to_lower "${app_name}")"
+        app_path="$(_append_path "$work_dir" "$app_dir")/${app_name}"
+
+        alenaal_info "Creating application: ${normalized_name}"
+
+        if _create_single_app "${normalized_name}" "${work_dir}" "${app_dir}"; then
+            alenaal_success "App '${normalized_name}' created successfully at ./${app_dir}/${normalized_name}"
+            success_count=$((success_count + 1))
+        else
+            alenaal_warning "Failed to create app '${normalized_name}'"
+            fail_count=$((fail_count + 1))
+        fi
+    done
+
+    # -------------------------------------------------------------------------
+    # Display Summary
+    # -------------------------------------------------------------------------
+    alenaal_newline
+    if [[ ${fail_count} -eq 0 ]]; then
+        alenaal_complete "Successfully created ${success_count} application(s)." --bold
+    else
+        alenaal_warning "Created ${success_count} application(s), failed: ${fail_count}"
+        return 2
+    fi
+    alenaal_newline
+
+    return 0
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the createapp command.
+#
+# Provides detailed information about creating Django applications with
+# proper configuration and AppConfig setup.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "createapp - Create Django Applications" --header --icon "📱"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Creates fully-configured Django applications with proper structure," --item
+    alenaal_format "auto-fixed AppConfig.name, and comprehensive scaffolded files." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Generated Files Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Generated Files:" --section --example
+    alenaal_format "Each app receives these files with scaffolded content:" --item
+    alenaal_newline
+
+    alenaal_format ".../[APP_DIR]/" --bold --indent 3
+    alenaal_format "├─ __init__.py" --indent 4
+    alenaal_format "├─ admin.py         # Admin interface configuration" --indent 4
+    alenaal_format "├─ apps.py          # AppConfig (automatically fixed)" --indent 4
+    alenaal_format "├─ models.py        # Database models" --indent 4
+    alenaal_format "├─ tests.py         # Unit tests" --indent 4
+    alenaal_format "├─ urls.py          # URL routing with app_name and namespace support" --indent 4
+    alenaal_format "├─ views.py         # View functions/classes" --indent 4
+    alenaal_format "├─ migrations/" --indent 4
+    alenaal_format "│  └─ __init__.py" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # AppConfig Fix Explanation
+    # -------------------------------------------------------------------------
+    alenaal_format "Automatic AppConfig Configuration:" --section --tip
+    alenaal_format "The command automatically configures AppConfig.name based on location:" --item
+    alenaal_newline
+
+    alenaal_format "Location: ./${APP_DIRECTORIES[default]}/blog/" --item --bold
+    alenaal_format "AppConfig.name = '${APP_DIRECTORIES[default]}.blog'" --indent 4 --italic
+
+    alenaal_format "Location: ./${APP_DIRECTORIES[extras]}/sphinx/" --item --bold
+    alenaal_format "AppConfig.name = '${APP_DIRECTORIES[extras]}.sphinx'" --indent 4 --italic
+
+    alenaal_format "Location: ./${APP_DIRECTORIES[package]}/katbal/" --item --bold
+    alenaal_format "AppConfig.name = '${APP_DIRECTORIES[package]}.katbal'" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "WORK_DIRECTORY" --item --list --bold
+    alenaal_format "Base directory for the Django project" --indent 4
+    alenaal_format "Default: current directory" --indent 4 --italic
+
+    alenaal_format "APP_DIRECTORY" --item --list --bold
+    alenaal_format "Directory name for Django applications" --indent 4
+    alenaal_format "Default: 'apps'" --indent 4 --italic
+
+    alenaal_format "PACK_DIRECTORY" --item --list --bold
+    alenaal_format "Directory name for package apps" --indent 4
+    alenaal_format "Default: 'djansin'" --indent 4 --italic
+
+    alenaal_format "EXTRAS_DIRECTORY" --item --list --bold
+    alenaal_format "Directory name for extra contributed apps" --indent 4
+    alenaal_format "Default: 'extras'" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+
+    alenaal_format  --item --list --bold -- "-n, --name NAME"
+    alenaal_format "Application name (can be used multiple times)" --indent 4
+    alenaal_format "Alternative to positional arguments" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-d, --dir DIRECTORY"
+    alenaal_format "Target directory for application creation" --indent 4
+    alenaal_format "Overrides app type defaults" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-e, --extras"
+    alenaal_format "Create app in extra contributed directory (${APP_DIRECTORIES[extras]})" --indent 4
+
+    alenaal_format --item --list --bold -- "-p, --package"
+    alenaal_format "Create app in package directory (${APP_DIRECTORIES[package]})" --indent 4
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # App Types Section
+    # -------------------------------------------------------------------------
+    alenaal_format "App Types:" --section --info
+    alenaal_format "The command supports three app types with default directories:" --item
+
+    alenaal_format "default" --item --list --bold --indent 4
+    alenaal_format "Standard Django apps in ./${APP_DIRECTORIES[default]}/" --indent 5
+
+    alenaal_format "extras" --item --list --bold --indent 4
+    alenaal_format "Extras contributed apps in ./${APP_DIRECTORIES[extras]}/" --indent 5
+
+    alenaal_format "package" --item --list --bold --indent 4
+    alenaal_format "Reusable package apps in ./${APP_DIRECTORIES[package]}/" --indent 5
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin createapp blog" --item --icon "⇢"
+    alenaal_format "yarsin createapp users blog api" --item --icon "⇢"
+    alenaal_format "yarsin createapp --extras sphinx" --item --icon "⇢"
+    alenaal_format "yarsin createapp --package katbal --name javezjal" --item --icon "⇢"
+    alenaal_format "yarsin createapp --dir ./my_apps blog" --item --icon "⇢"
+
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for creating and configuring applications.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _get_app_dir
+#
+# Gets the default directory for an app type.
+#
+# Args:
+#   $1 - app_type: Type of app (default, extras, package)
+#
+# Returns:
+#   Prints the directory path for the app type
+# -----------------------------------------------------------------------------
+_get_app_dir() {
+    local app_type="$1"
+    
+    if [[ -z "$app_type" ]]; then
+        alenaal_error "App type cannot be empty"
+        return 1
+    fi
+
+    local app_dir="${APP_DIRECTORIES[$app_type]:-}"
+
+    if [[ -z "$app_dir" ]]; then
+        alenaal_warning "Unknown app type '${app_type}', using default directory"
+        app_dir="${APP_DIRECTORIES[default]:-apps}"
+    fi
+
+    echo "$app_dir"
+}
+
+# -----------------------------------------------------------------------------
+# Function: _normalize_path
+#
+# Validates and normalizes file paths with strict security checks.
+#
+# Features:
+#   - Validates all relative path components
+#   - Rejects unsafe path traversals (../, .., etc.)
+#   - Normalizes ./ prefix removal
+#   - Removes trailing slashes
+#   - Returns clean path or exits with error
+#
+# Args:
+#   $1 - path: Path to normalize
+#
+# Returns:
+#   Prints normalized path on success, exits with error on failure
+# -----------------------------------------------------------------------------
+_normalize_path() {
+    local original_path="$1"
+    local normalized_path=""
+
+    # -------------------------------------------------------------------------
+    # Phase 1: Input Validation and Sanitization
+    # -------------------------------------------------------------------------
+    if [[ -z "$original_path" ]]; then
+        alenaal_error "No path provided to _normalize_path()"
+        return 1
+    fi
+
+    # Remove whitespace
+    local clean_path
+    clean_path=$(echo "$original_path" | tr -d '[:space:]')
+    
+    if [[ -z "$clean_path" ]]; then
+        alenaal_error "Path is empty after removing whitespace: '$original_path'"
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Phase 2: Detect and Reject Unsafe Path Traversals
+    # -------------------------------------------------------------------------
+    case "$clean_path" in
+        ../*|*/../*|*/..|..)
+            alenaal_error "Unsafe path traversal detected (parent directory reference): '$original_path'"
+            return 1
+            ;;
+    esac
+
+    if echo "$clean_path" | grep -q '\.\.'; then
+        alenaal_error "Path contains illegal '..' sequence: '$original_path'"
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Phase 3: Remove Leading ./ Prefix
+    # -------------------------------------------------------------------------
+    normalized_path="$clean_path"
+
+    case "$normalized_path" in
+        ./*)
+            normalized_path="${normalized_path#./}"
+            ;;
+    esac
+
+    # Handle special case: "." or empty
+    if [[ "$normalized_path" == "." || -z "$normalized_path" ]]; then
+        echo ""
+        return 0
+    fi
+
+    # -------------------------------------------------------------------------
+    # Phase 4: Validate Path Components
+    # -------------------------------------------------------------------------
+    if echo "$normalized_path" | grep -q '//'; then
+        alenaal_error "Path contains consecutive slashes: '$original_path'"
+        return 1
+    fi
+
+    if echo "$normalized_path" | grep -q '/\./'; then
+        alenaal_error "Path contains redundant '/./' pattern: '$original_path'"
+        return 1
+    fi
+
+    # Check for invalid filesystem characters
+    local invalid_chars
+    invalid_chars=$(echo "$normalized_path" | grep -o '[<>:"|?*\\]' | head -n1)
+    if [[ -n "$invalid_chars" ]]; then
+        alenaal_error "Path contains invalid character '$invalid_chars': '$original_path'"
+        return 1
+    fi
+
+    # Reject absolute paths
+    case "$normalized_path" in
+        /*)
+            alenaal_error "Absolute paths are not allowed: '$original_path'"
+            return 1
+            ;;
+    esac
+
+    # -------------------------------------------------------------------------
+    # Phase 5: Remove Trailing Slashes
+    # -------------------------------------------------------------------------
+    while [[ "$normalized_path" == */ ]]; do
+        normalized_path="${normalized_path%/}"
+    done
+
+    if [[ -z "$normalized_path" ]]; then
+        alenaal_error "Path became empty after removing trailing slashes: '$original_path'"
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Phase 6: Final Validation
+    # -------------------------------------------------------------------------
+    local IFS='/'
+    for component in $normalized_path; do
+        if [[ -z "$component" ]]; then
+            continue
+        fi
+
+        case "$component" in
+            .|..)
+                alenaal_error "Invalid path component '$component' in: '$original_path'"
+                return 1
+                ;;
+            .*)
+                alenaal_error "Hidden paths are not allowed: '$original_path'"
+                return 1
+                ;;
+        esac
+    done
+
+    echo "$normalized_path"
+}
+
+# -----------------------------------------------------------------------------
+# Function: _convert_slashed_path_to_dot
+#
+# Converts filesystem paths to Python module dot notation.
+#
+# Description:
+#   - Uses _normalize_path() for initial validation and cleanup
+#   - Converts forward slashes (/) to dots (.) for Python imports
+#   - Handles edge cases like duplicate dots and leading/trailing dots
+#
+# Args:
+#   $1 - path: Filesystem path to convert
+#
+# Returns:
+#   Prints Python module dot notation
+# -----------------------------------------------------------------------------
+_convert_slashed_path_to_dot() {
+    if [[ -z "$1" ]]; then
+        return 0
+    fi
+
+    local input_path="$1"
+    local normalized_path
+
+    normalized_path="$(_normalize_path "$input_path")" || return 1
+
+    # Convert slashes to dots
+    local dot_path
+    dot_path=$(echo "$normalized_path" | tr '/' '.')
+
+    # Remove duplicate consecutive dots
+    if command -v sed >/dev/null 2>&1; then
+        dot_path=$(echo "$dot_path" | sed 's/\.\.\+/./g')
+    else
+        while echo "$dot_path" | grep -q '\.\.'; do
+            dot_path=$(echo "$dot_path" | sed 's/\.\././g' 2>/dev/null || echo "$dot_path")
+        done
+    fi
+
+    # Clean up leading/trailing dots
+    case "$dot_path" in
+        ..*) ;;  # Keep for relative imports
+        .*) dot_path="${dot_path#.}" ;;
+    esac
+
+    dot_path="${dot_path%.}"
+
+    echo "$dot_path"
+}
+
+# -----------------------------------------------------------------------------
+# Function: _to_lower
+#
+# Converts a string to lowercase.
+#
+# Args:
+#   $1 - input: String to convert
+#
+# Returns:
+#   Prints lowercase version of the input string
+# -----------------------------------------------------------------------------
+_to_lower() {
+    local input="$1"
+    echo "$input" | tr '[:upper:]' '[:lower:]'
+}
+
+# -----------------------------------------------------------------------------
+# Function: _to_capitalize
+#
+# Capitalizes the first letter of a string.
+#
+# Args:
+#   $1 - input: String to capitalize
+#
+# Returns:
+#   Prints string with first letter capitalized
+# -----------------------------------------------------------------------------
+_to_capitalize() {
+    local input="$1"
+    echo "$(tr '[:lower:]' '[:upper:]' <<<"${input:0:1}")${input:1}"
+}
+
+# -----------------------------------------------------------------------------
+# Function: _append_path
+#
+# Safely appends a subpath to a root path.
+#
+# Args:
+#   $1 - root: Root directory path
+#   $2 - path: Subpath to append (can be empty)
+#
+# Returns:
+#   Prints combined path
+# -----------------------------------------------------------------------------
+_append_path() {
+    local root="$1"
+    local path="$2"
+
+    if [[ -n "$path" ]]; then
+        echo "${root}/${path}"
+    else
+        echo "$root"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# Function: _get_file_dir
+#
+# Constructs the full file path for an application.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+#
+# Returns:
+#   Prints complete file path
+# -----------------------------------------------------------------------------
+_get_file_dir() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+
+    local base_path
+    base_path="$(_append_path "$root_dir" "$apps_dir")"
+    echo "${base_path}/${app_name}"
+}
+
+# -----------------------------------------------------------------------------
+# Function: _get_app_config_name
+#
+# Generates a configuration name for an application.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - apps_dir: Apps directory path (optional)
+#
+# Returns:
+#   Prints configuration name with directory prefix in dot notation
+# -----------------------------------------------------------------------------
+_get_app_config_name() {
+    local app_name="$1"
+    local apps_dir="$2"
+
+    if [[ -n "${apps_dir}" ]]; then
+        local dir_prefix
+        dir_prefix="$(_convert_slashed_path_to_dot "$apps_dir")"
+        echo "${dir_prefix}.${app_name}"
+    else
+        echo "$app_name"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# Function: _create_single_app
+#
+# Creates a complete Django application structure with all standard files.
+#
+# Args:
+#   $1 - app_name: Application name (lowercase)
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+#
+# Returns:
+#   0 - Successfully created the Django app
+#   1 - App directory already exists
+# -----------------------------------------------------------------------------
+_create_single_app() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+
+    local app_path
+    app_path="$(_append_path "$root_dir" "$apps_dir")/${app_name}"
+
+    if [[ -d "${app_path}" ]]; then
+        alenaal_warning "App '${app_name}' already exists at: ${app_path}"
+        return 1
+    fi
+
+    mkdir -p "${app_path}" "${app_path}/migrations"
+
+    touch "${app_path}/__init__.py"
+    touch "${app_path}/migrations/__init__.py"
+
+    # Generate standard Django app files
+    _generate_admin_py "${app_name}" "${root_dir}" "${apps_dir}" \
+        && _generate_apps_py "${app_name}" "${root_dir}" "${apps_dir}" \
+        && _generate_models_py "${app_name}" "${root_dir}" "${apps_dir}" \
+        && _generate_tests_py "${app_name}" "${root_dir}" "${apps_dir}" \
+        && _generate_urls_py "${app_name}" "${root_dir}" "${apps_dir}" \
+        && _generate_views_py "${app_name}" "${root_dir}" "${apps_dir}"
+
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _generate_admin_py
+#
+# Generates admin.py for a Django app.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+# -----------------------------------------------------------------------------
+_generate_admin_py() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+    
+    local file_path
+    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/admin.py"
+    local app_config_name
+    app_config_name="$(_get_app_config_name "${app_name}" "${apps_dir}")"
+    local capitalized_name
+    capitalized_name="$(_to_capitalize "${app_name}")"
+    
+    cat > "$file_path" <<EOF
+"""Admin Interface Configuration for ${capitalized_name} App.
+
+This module configures the Django admin interface for models in the 
+${capitalized_name} application. It defines how models are displayed, 
+filtered, and edited in the admin dashboard.
+
+The admin configuration follows Django best practices:
+    - Uses @admin.register() decorator for clean registration
+    - Customizes list displays for optimal data overview
+    - Implements search and filter capabilities
+    - Maintains separation between admin UI and business logic
+
+Note:
+    - Uncomment model imports when models are defined
+    - Register each model with appropriate ModelAdmin class
+    - Keep admin customizations focused on presentation only
+"""
+
+from django.contrib import admin
+
+from ${app_config_name} import models
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _generate_apps_py
+#
+# Generates apps.py for a Django app.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+# -----------------------------------------------------------------------------
+_generate_apps_py() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+
+    local file_path
+    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/apps.py"
+    local app_config_name
+    app_config_name="$(_get_app_config_name "${app_name}" "${apps_dir}")"
+    local capitalized_name
+    capitalized_name="$(_to_capitalize "${app_name}")"
+
+    cat > "$file_path" <<EOF
+"""Application Configuration for ${capitalized_name} App.
+
+This module defines the AppConfig class that registers this Django app
+with the project. It controls how Django discovers, initializes, and
+references the application throughout the project lifecycle.
+
+The configuration handles critical app metadata:
+    - Python import path for the app (name attribute)
+    - Human-readable display name (verbose_name)
+    - Default primary key field type
+    - App initialization logic (ready() method)
+
+Attributes:
+    default_auto_field: Default primary key type for models
+    name: Python import path (auto-configured for your structure)
+    verbose_name: Human-readable app name for admin display
+
+Note:
+    - The 'name' attribute is automatically set to '${app_config_name}'
+    - Override ready() method for signal registration
+    - Keep configuration minimal unless app initialization is needed
+"""
+
+from django.apps import AppConfig
+
+
+class ${capitalized_name}Config(AppConfig):
+    """Django AppConfig for ${capitalized_name} application.
+
+    This class configures how Django interacts with this app, including
+    its Python path, display name, and initialization behavior.
+
+    Attributes:
+        default_auto_field: Model primary key field type (BigAutoField)
+        name: Python import path (e.g., '${app_config_name}')
+        verbose_name: Display name in admin interface
+    """
+
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "${app_config_name}"
+    verbose_name = "${capitalized_name} Application"
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _generate_models_py
+#
+# Generates models.py for a Django app.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+# -----------------------------------------------------------------------------
+_generate_models_py() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+
+    local file_path
+    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/models.py"
+    local app_config_name
+    app_config_name="$(_get_app_config_name "${app_name}" "${apps_dir}")"
+    local capitalized_name
+    capitalized_name="$(_to_capitalize "${app_name}")"
+
+    cat > "$file_path" <<EOF
+"""Database Models for ${capitalized_name} App.
+
+This module defines the database schema using Django's ORM. Models represent
+the core data structures of your application and encapsulate business logic,
+validation rules, and relationships between data entities.
+
+Model Design Guidelines:
+    - Each model maps to a single database table
+    - Field definitions determine column types and constraints
+    - Relationships (ForeignKey, ManyToMany) define data associations
+    - Meta class configures table behavior (ordering, permissions)
+    - __str__() provides human-readable representation
+
+Note:
+    - Define all models before creating migrations
+    - Use appropriate field types and constraints
+    - Add docstrings to model classes for documentation
+    - Keep business logic in models when it relates to data
+"""
+
+from django.db import models
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _generate_tests_py
+#
+# Generates tests.py for a Django app.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+# -----------------------------------------------------------------------------
+_generate_tests_py() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+
+    local file_path
+    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/tests.py"
+    local app_config_name
+    app_config_name="$(_get_app_config_name "${app_name}" "${apps_dir}")"
+    local capitalized_name
+    capitalized_name="$(_to_capitalize "${app_name}")"
+
+    cat > "$file_path" <<EOF
+"""Test Suite for ${capitalized_name} App.
+
+This module contains comprehensive tests for all components of the
+${capitalized_name} application including models, views, forms, and
+any custom business logic. Tests ensure code reliability and prevent
+regressions during development.
+
+Testing Strategy:
+    - Unit tests: Test individual components in isolation
+    - Integration tests: Test component interactions
+    - Edge cases: Test boundary conditions and error handling
+    - Performance: Test response times under load (if applicable)
+
+Best Practices:
+    - Use descriptive test names: test_<scenario>_<expected_result>
+    - Keep tests independent (no shared state)
+    - Use setUp() to create common test data
+    - Test both success paths and failure conditions
+    - Mock external services to avoid side effects
+
+Note:
+    - Extend TestCase for database-backed tests
+    - Use pytest fixtures for reusable test components
+    - Aim for high test coverage on critical paths
+    - Run tests with: python manage.py test ${app_name}
+"""
+
+from django.test import TestCase
+
+from ${app_config_name} import models
+
+
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _generate_urls_py
+#
+# Generates urls.py for a Django app.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+# -----------------------------------------------------------------------------
+_generate_urls_py() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+
+    local file_path
+    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/urls.py"
+    local app_config_name
+    app_config_name="$(_get_app_config_name "${app_name}" "${apps_dir}")"
+    local capitalized_name
+    capitalized_name="$(_to_capitalize "${app_name}")"
+
+    cat > "$file_path" <<EOF
+"""URL Configuration for ${capitalized_name} App.
+
+This module defines URL patterns that map incoming web requests to the
+appropriate view functions or classes. It organizes all app-specific
+routes in one central location for maintainability.
+
+URL Pattern Components:
+    - Route: URL string pattern (can include converters)
+    - View: Function or class that handles the request
+    - Name: Unique identifier for reverse URL lookups
+    - Namespace: 'app_name' variable for URL namespacing
+
+Pattern Types:
+    - Static routes: path('about/', views.about)
+    - Dynamic routes: path('article/<int:pk>/', views.detail)
+    - Nested includes: path('api/', include(api_urls))
+
+Note:
+    - Always define app_name for URL namespacing
+    - Use path() for simple routes, re_path() for regex when needed
+    - Name all URLs for reverse() lookups in templates/views
+    - Group related patterns for readability
+"""
+
+from django.urls import path
+from rest_framework.routers import DefaultRouter
+
+from ${app_config_name} import views
+
+
+# Namespace for URL reversing
+app_name = "$(_to_lower "${app_name}")"
+
+# Handles ViewSet routing automatically
+router = DefaultRouter()
+
+
+# router.register("resource-name", views.YourViewSet, basename="basename")  # Register ViewSets
+
+urlpatterns = router.urls
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Function: _generate_views_py
+#
+# Generates views.py for a Django app.
+#
+# Args:
+#   $1 - app_name: Application name
+#   $2 - root_dir: Root directory path
+#   $3 - apps_dir: Apps directory subpath
+# -----------------------------------------------------------------------------
+_generate_views_py() {
+    local app_name="$1"
+    local root_dir="$2"
+    local apps_dir="$3"
+
+    local file_path
+    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/views.py"
+    local app_config_name
+    app_config_name="$(_get_app_config_name "${app_name}" "${apps_dir}")"
+    local capitalized_name
+    capitalized_name="$(_to_capitalize "${app_name}")"
+
+    cat > "$file_path" <<EOF
+"""View Definitions for ${capitalized_name} App.
+
+This module contains function-based and class-based views that handle
+HTTP requests and return HTTP responses. Views are the core of the
+request-response cycle, connecting URL patterns to business logic.
+
+View Types:
+    - Function-Based Views (FBV): Simple, explicit control flow
+    - Class-Based Views (CBV): Reusable, DRY, built-in generic views
+    - API Views: For REST endpoints (if using DRF)
+
+Key Responsibilities:
+    - Process incoming request data
+    - Execute business logic (often delegated to models/services)
+    - Return appropriate HTTP responses
+    - Handle authentication and permissions
+    - Render templates or return JSON data
+
+Best Practices:
+    - Keep views thin; delegate complex logic to models/services
+    - Use get_object_or_404() for object retrieval
+    - Return appropriate HTTP status codes
+    - Document view behavior in docstrings
+    - Use Django's built-in generic views when possible
+"""
+
+from rest_framework import viewsets
+
+from ${app_config_name} import models
+EOF
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Metadata Handler for YARSIN Commands
+# =============================================================================
+# Description: Provides metadata access functions for YARSIN commands.
+#              This file is meant to be sourced by command scripts to expose
+#              their metadata to the YARSIN dispatcher.
+#
+# Usage:
+#   In your command script, after defining CMD_METADATA, source this file:
+#     source "${YARSIN_CORE_PATH}/includes/metadata" "$@"
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of this script. This file is designed to be sourced,
+# not executed directly. If someone tries to run it directly, show an error.
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This file is meant to be sourced, not executed directly." >&2
+    echo "Usage: source metadata" >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# METADATA ACCESS FUNCTIONS
+# =============================================================================
+# These functions provide access to the command metadata defined in CMD_METADATA.
+# They are used by the YARSIN dispatcher for command discovery and help display.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: metadata
+#
+# Returns all command metadata as key=value pairs.
+#
+# Description:
+#   Iterates through all keys in the CMD_METADATA associative array and prints
+#   them in key=value format, one per line. This allows the dispatcher to
+#   easily parse command information for discovery and categorization.
+#
+# Globals:
+#   CMD_METADATA - Associative array containing command metadata
+#
+# Output:
+#   Prints each metadata entry as "key=value" on a separate line
+#
+# Example:
+#   $ metadata
+#   name=backup
+#   category=database
+#   description=PostgreSQL backup utilities
+#   usage=yarsin backup <subcommand> [OPTIONS]
+#   version=1.0.0
+#   requires=postgresql-client
+# -----------------------------------------------------------------------------
+metadata() {
+    local key
+    
+    # Validate that CMD_METADATA is defined and is an associative array
+    if ! declare -p CMD_METADATA 2>/dev/null | grep -q 'declare -A'; then
+        alenaal_error "Error: CMD_METADATA is not defined or is not an associative array" >&2
+        return 1
+    fi
+    
+    # Iterate through all keys in sorted order for consistent output
+    while IFS= read -r key; do
+        printf "%s=%s\n" "$key" "${CMD_METADATA[$key]}"
+    done < <(printf '%s\n' "${!CMD_METADATA[@]}" | sort)
+    
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: metadata_value
+#
+# Returns the value of a specific metadata field.
+#
+# Description:
+#   Retrieves the value for a given metadata key from CMD_METADATA.
+#   Useful when the dispatcher needs a specific piece of information
+#   without parsing all metadata.
+#
+# Args:
+#   $1 - key: The metadata field name to retrieve
+#
+# Output:
+#   Prints the value of the requested metadata field
+#
+# Returns:
+#   0 - Success, value found and printed
+#   1 - Key not found or CMD_METADATA not properly defined
+#
+# Example:
+#   $ metadata_value "name"
+#   backup
+# -----------------------------------------------------------------------------
+metadata_value() {
+    local key="$1"
+    
+    # Validate input
+    if [[ -z "$key" ]]; then
+        echo "Error: metadata_value requires a key argument" >&2
+        return 1
+    fi
+    
+    # Validate that CMD_METADATA is defined and is an associative array
+    if ! declare -p CMD_METADATA 2>/dev/null | grep -q 'declare -A'; then
+        echo "Error: CMD_METADATA is not defined or is not an associative array" >&2
+        return 1
+    fi
+    
+    # Get the value
+    local value="${CMD_METADATA[$key]:-}"
+    
+    if [[ -n "$value" ]]; then
+        echo -n "$value"
+        return 0
+    fi
+    
+    # Key not found (or empty value)
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Function: check_requirements
+#
+# Verifies that all required commands are available in the system.
+#
+# Description:
+#   Checks the 'requires' field in CMD_METADATA and ensures each required
+#   command is available in the PATH. If any requirements are missing,
+#   it reports them and returns an error. This helps prevent cryptic errors
+#   when a required tool is not installed.
+#
+# Globals:
+#   CMD_METADATA - Associative array containing command metadata
+#
+# Output:
+#   If requirements are missing, prints error messages via alenaal_error
+#
+# Returns:
+#   0 - All requirements satisfied
+#   1 - One or more requirements missing
+#
+# Example:
+#   if ! check_requirements; then
+#       echo "Please install missing requirements"
+#       exit 1
+#   fi
+# -----------------------------------------------------------------------------
+check_requirements() {
+    local missing=()
+    local reqs="${CMD_METADATA[requires]:-}"
+
+    # If no requirements specified, trivially succeed
+    if [[ -z "$reqs" ]]; then
+        return 0
+    fi
+
+    # Check each requirement
+    local req
+    for req in $reqs; do
+        if ! command -v "$req" &>/dev/null; then
+            missing+=("$req")
+        fi
+    done
+
+    # Report missing requirements
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        # Check if alenaal is available for formatted output
+        if declare -f alenaal_error >/dev/null 2>&1; then
+            alenaal_error "Missing requirements: ${missing[*]}"
+            alenaal_suggestion "Please install the missing dependencies and try again"
+        else
+            # Fallback to plain echo if alenaal is not available
+            echo "Error: Missing requirements: ${missing[*]}" >&2
+        fi
+        return 1
+    fi
+
+    return 0
+}
+
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+# Additional helper functions for metadata handling
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: metadata_keys
+#
+# Returns a list of all metadata keys.
+#
+# Description:
+#   Prints all keys defined in CMD_METADATA, one per line.
+#   Useful for discovery and validation.
+#
+# Output:
+#   Prints each metadata key on a separate line
+#
+# Example:
+#   $ metadata_keys
+#   name
+#   category
+#   description
+#   usage
+#   version
+#   requires
+# -----------------------------------------------------------------------------
+metadata_keys() {
+    # Validate that CMD_METADATA is defined
+    if ! declare -p CMD_METADATA 2>/dev/null | grep -q 'declare -A'; then
+        echo "Error: CMD_METADATA is not defined or is not an associative array" >&2
+        return 1
+    fi
+    
+    printf '%s\n' "${!CMD_METADATA[@]}" | sort
+}
+
+# -----------------------------------------------------------------------------
+# Function: metadata_has_key
+#
+# Checks if a specific metadata key exists.
+#
+# Args:
+#   $1 - key: The metadata key to check
+#
+# Returns:
+#   0 - Key exists
+#   1 - Key does not exist or CMD_METADATA not properly defined
+#
+# Example:
+#   if metadata_has_key "category"; then
+#       echo "Category is defined"
+#   fi
+# -----------------------------------------------------------------------------
+metadata_has_key() {
+    local key="$1"
+    
+    if [[ -z "$key" ]]; then
+        return 1
+    fi
+    
+    if ! declare -p CMD_METADATA 2>/dev/null | grep -q 'declare -A'; then
+        return 1
+    fi
+    
+    [[ -n "${CMD_METADATA[$key]:+x}" ]]
+}
+
+
+# =============================================================================
+# AUTO-EXECUTION HANDLER
+# =============================================================================
+# If this script is sourced with arguments, automatically handle common requests.
+# This allows the dispatcher to simply source this file with the appropriate
+# arguments to get metadata information.
+#
+# Supported operations:
+#   --metadata        - Print all metadata
+#   --value KEY       - Print specific metadata value
+#   --check-reqs      - Check requirements
+#   --has-key KEY     - Check if key exists (returns 0/1)
+# -----------------------------------------------------------------------------
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        --metadata)
+            metadata
+            exit $?
+            ;;
+        --value)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --value requires a key argument" >&2
+                exit 1
+            fi
+            metadata_value "$2"
+            exit $?
+            ;;
+        --check-reqs)
+            check_requirements
+            exit $?
+            ;;
+        --has-key)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --has-key requires a key argument" >&2
+                exit 1
+            fi
+            if metadata_has_key "$2"; then
+                exit 0
+            else
+                exit 1
+            fi
+            ;;
+        *)
+            # Unknown argument, ignore
+            ;;
+    esac
+fi

@@ -1,0 +1,681 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: backup
+# Description: PostgreSQL database backup utilities
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="backup"
+    [category]="database"
+    [description]="PostgreSQL database backup utilities"
+    [usage]="yarsin backup <subcommand> [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="postgresql-client"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Connection Configuration
+# -----------------------------------------------------------------------------
+# These environment variables are used by PostgreSQL client tools.
+# They can be set externally or will use these defaults.
+# -----------------------------------------------------------------------------
+
+# Set the necessary environment variables for the database connection
+export PGHOST="${POSTGRES_HOST:-localhost}"         # The host where the PostgreSQL database is running
+export PGPORT="${POSTGRES_PORT:-5432}"              # The port number for connecting to the PostgreSQL database
+export PGUSER="${POSTGRES_USER:-postgres}"          # The username for accessing the PostgreSQL database
+export PGPASSWORD="${POSTGRES_PASSWORD:-}"          # The password for the PostgreSQL database user
+export PGDATABASE="${POSTGRES_DB:-postgres}"        # The name of the default database to be used
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the backup command.
+#
+# Description:
+#   Provides PostgreSQL backup utilities with two main modes:
+#   - dbms: Full PostgreSQL data directory backup (requires filesystem access)
+#   - data: Individual database backup using pg_dump
+#
+# Arguments:
+#   $@ - Subcommand and options
+#
+# Subcommands:
+#   dbms         Full PostgreSQL data directory backup
+#   data         Individual database backup
+#
+# Options:
+#   -h, --help   Display this help message
+#
+# Environment Variables:
+#   POSTGRES_HOST       Database host (default: localhost)
+#   POSTGRES_PORT       Database port (default: 5432)
+#   POSTGRES_USER       Database user (default: postgres)
+#   POSTGRES_PASSWORD   Database password (required)
+#   POSTGRES_DB         Default database (default: postgres)
+#   BACKUP_ROOT         Root backup directory (default: /backup)
+#   PGDATA              PostgreSQL data directory (default: /var/lib/postgresql/data)
+#
+# Returns:
+#   0 - Backup completed successfully
+#   1 - Invalid arguments
+#   2 - Backup failed
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    if [[ $# -eq 0 ]]; then
+        show_help
+        return 0
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            dbms)
+                shift
+                _backup_dbms "$@"
+                return $?
+                ;;
+
+            data)
+                shift
+                _backup_data "$@"
+                return $?
+                ;;
+
+            *)
+                alenaal_error "Invalid subcommand: '$1'"
+                alenaal_suggestion "Available subcommands: dbms, data"
+                alenaal_suggestion "Use 'yarsin backup --help' for usage information"
+                return 1
+                ;;
+        esac
+    done
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the backup command.
+#
+# Provides detailed information about PostgreSQL backup options,
+# including both full DBMS backups and individual database dumps.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "backup - PostgreSQL Database Backup Utilities" --header --icon "💾"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Provides two backup modes: full DBMS backup (data directory) and" --item
+    alenaal_format "individual database dumps using pg_dump." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin backup dbms [OPTIONS]" --item --icon "⇢"
+    alenaal_format "yarsin backup data [OPTIONS]" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Subcommands Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Subcommands:" --section --option
+
+    alenaal_format "dbms" --item --list --bold
+    alenaal_format "Full PostgreSQL data directory backup" --indent 4
+    alenaal_format "Requires filesystem access to PGDATA" --indent 4 --italic
+    alenaal_format "Creates compressed tar.gz archive" --indent 4 --italic
+
+    alenaal_format "data" --item --list --bold
+    alenaal_format "Individual database backup using pg_dump" --indent 4
+    alenaal_format "Creates compressed SQL dump (.sql.gz)" --indent 4 --italic
+    alenaal_format "Interactive database selection" --indent 4 --italic
+
+    alenaal_format "--help, -h" --item --list --bold
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # DBMS Backup Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "DBMS Backup Options:" --section --info
+    alenaal_format "yarsin backup dbms [OPTIONS]" --item --bold
+
+    alenaal_format --item --list --bold --indent 4 -- "-u, --username USER"
+    alenaal_format "PostgreSQL username (overrides POSTGRES_USER)" --indent 5
+
+    alenaal_format --item --list --bold --indent 4 -- "-p, --password PASS"
+    alenaal_format "PostgreSQL password (overrides POSTGRES_PASSWORD)" --indent 5
+
+    alenaal_format --item --list --bold --indent 4 -- "-n, --name NAME"
+    alenaal_format "Custom backup filename" --indent 5
+    alenaal_format "Default: {prefix}___{timestamp}___{suffix}.tar.gz" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Data Backup Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Data Backup Options:" --section --info
+    alenaal_format "yarsin backup data [OPTIONS]" --item --bold
+
+    alenaal_format --item --list --bold --indent 4 -- "-d, --dbname NAME"
+    alenaal_format "Database name to backup" --indent 5
+    alenaal_format "If not provided, interactive selection" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-b, --backup NAME"
+    alenaal_format "Custom backup filename" --indent 5
+    alenaal_format "Default: {dbname}___{timestamp}___{suffix}.sql.gz" --indent 5 --italic
+
+    alenaal_format --item --list --bold --indent 4 -- "-u, --username USER"
+    alenaal_format "PostgreSQL username (overrides POSTGRES_USER)" --indent 5
+
+    alenaal_format --item --list --bold --indent 4 -- "-p, --password PASS"
+    alenaal_format "PostgreSQL password (overrides POSTGRES_PASSWORD)" --indent 5
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "POSTGRES_HOST" --item --list --bold
+    alenaal_format "Database host (default: localhost)" --indent 4
+
+    alenaal_format "POSTGRES_PORT" --item --list --bold
+    alenaal_format "Database port (default: 5432)" --indent 4
+
+    alenaal_format "POSTGRES_USER" --item --list --bold
+    alenaal_format "Database user (default: postgres)" --indent 4
+
+    alenaal_format "POSTGRES_PASSWORD" --item --list --bold
+    alenaal_format "Database password (REQUIRED for authentication)" --indent 4
+
+    alenaal_format "POSTGRES_DB" --item --list --bold
+    alenaal_format "Default database (default: postgres)" --indent 4
+
+    alenaal_format "PGDATA" --item --list --bold
+    alenaal_format "PostgreSQL data directory (default: /var/lib/postgresql/data)" --indent 4
+    alenaal_format "Used for DBMS backups" --indent 4 --italic
+
+    alenaal_format "BACKUP_ROOT" --item --list --bold
+    alenaal_format "Root backup directory (default: /backup)" --indent 4
+    alenaal_format "Creates: \${BACKUP_ROOT}/dbms/ and \${BACKUP_ROOT}/databases/" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Full DBMS backup" --subsection --italic
+    alenaal_format "yarsin backup dbms" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates full PostgreSQL data directory backup" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "DBMS backup with custom name" --subsection --italic
+    alenaal_format "yarsin backup dbms --name production_backup.tar.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Backup with custom filename" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "DBMS backup with credentials" --subsection --italic
+    alenaal_format "yarsin backup dbms --username admin --password secret" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Override database credentials" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Interactive database backup" --subsection --italic
+    alenaal_format "yarsin backup data" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Lists databases and prompts for selection" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Specific database backup" --subsection --italic
+    alenaal_format "yarsin backup data --dbname myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Backup specific database without interactive prompt" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Database backup with custom name" --subsection --italic
+    alenaal_format "yarsin backup data --dbname myapp --backup myapp_dump.sql.gz" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Custom backup filename" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "With explicit credentials" --subsection --italic
+    alenaal_format "yarsin backup data \ " --item --icon "⇢" --indent 4 --bold
+    alenaal_format --indent 6 --bold -- "--dbname myapp \ "
+    alenaal_format --indent 6 --bold -- "--username backup_user \ "
+    alenaal_format --indent 6 --bold -- "--password backup_pass"
+    alenaal_format "Backup with specific database credentials" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Using environment variables" --subsection --italic
+    alenaal_format "export POSTGRES_HOST=db.example.com" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export POSTGRES_USER=backup_user" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export POSTGRES_PASSWORD=secret" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export BACKUP_ROOT=/mnt/backups" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin backup data --dbname myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "Cron job setup" --subsection --italic
+    alenaal_format "0 2 * * * /usr/local/bin/yarsin backup dbms" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Daily DBMS backup at 2 AM" --indent 5 --italic
+    alenaal_format "0 3 * * * /usr/local/bin/yarsin backup data --dbname myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Daily database backup at 3 AM" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Backup Locations Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Backup Locations:" --section --info
+    alenaal_format "DBMS backups:  ${DBMS_BACKUP_PATH}/" --item --list
+    alenaal_format "Data backups:  ${DATA_BACKUP_PATH}/" --item --list
+    alenaal_newline
+
+    alenaal_format "Filename conventions:" --subsection
+    alenaal_format "DBMS:  ${DBMS_BACKUP_FILE_PREFIX}___YYYY_MM_DD__HH_MM_SS___${DBMS_BACKUP_FILE_SUFFIX}.tar.gz" --item --indent 4 --italic
+    alenaal_format "Data:  {dbname}___YYYY_MM_DD__HH_MM_SS___${DATA_BACKUP_FILE_SUFFIX}.sql.gz" --item --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "PostgreSQL client tools (pg_dump, psql)" --item --list
+    alenaal_format "Access to PostgreSQL server" --item --list
+    alenaal_format "Write permissions in backup directories" --item --list
+    alenaal_format "For DBMS backups: read access to PGDATA" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0  - Backup completed successfully" --item --list
+    alenaal_format "1  - Invalid arguments or missing credentials" --item --list
+    alenaal_format "2  - Backup failed (database not found, permission denied, etc.)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for backup operations.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _backup_dbms
+#
+# Performs full PostgreSQL data directory backup.
+#
+# Creates a compressed tar archive of the PostgreSQL data directory.
+# Requires filesystem access to PGDATA.
+#
+# Args:
+#   $@ - Options: -u|--username, -p|--password, -n|--name
+#
+# Returns:
+#   0 - Backup successful
+#   1 - Invalid arguments
+#   2 - Backup failed
+# -----------------------------------------------------------------------------
+_backup_dbms() {
+    # Initialize variables
+    local username=""
+    local password=""
+    local backup_name=""
+    local backup_path=""
+
+    # Parse named arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -u|--username)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--username' requires an argument"
+                    return 1
+                fi
+                username="$2"
+                shift 2
+                ;;
+
+            -p|--password)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--password' requires an argument"
+                    return 1
+                fi
+                password="$2"
+                shift 2
+                ;;
+
+            -n|--name)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--name' requires an argument"
+                    return 1
+                fi
+                backup_name="$2"
+                shift 2
+                ;;
+
+            *)
+                alenaal_error "Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # Check if required arguments are provided
+    if [[ -n "$username" && -n "$password" ]]; then
+        export PGUSER="${username}"     # Set the username for PostgreSQL
+        export PGPASSWORD="${password}" # Set the password for PostgreSQL
+    elif [[ -n "$username" || -n "$password" ]]; then
+        alenaal_error "Both username and password must be provided together"
+        return 1
+    fi
+
+    # Ensure backup directory exists
+    if ! _ensure_directory "${DBMS_BACKUP_PATH}"; then
+        alenaal_error "Failed to create backup directory: ${DBMS_BACKUP_PATH}"
+        return 2
+    fi
+
+    # Check if backup source exists
+    if [[ ! -d "${POSTGRESQL_DATA}" ]]; then
+        alenaal_error "Backup source directory not found: ${POSTGRESQL_DATA}"
+        alenaal_suggestion "Set PGDATA environment variable to correct PostgreSQL data directory"
+        return 2
+    fi
+
+    # Set backup path
+    if [[ -n "$backup_name" ]]; then
+        backup_path="${DBMS_BACKUP_PATH}/${backup_name}"
+    else
+        # Set default backup file name if not provided
+        backup_path="${DBMS_BACKUP_PATH}/${DBMS_BACKUP_FILE_PREFIX}___$(date +'%Y_%m_%d__%H_%M_%S')___${DBMS_BACKUP_FILE_SUFFIX}.tar.gz"
+    fi
+
+    # Display welcome message
+    alenaal_welcome "Initializing DBMS backup..."
+    alenaal_newline
+    alenaal_info "Creating DBMS backup at: ${backup_path}"
+
+    # Create a tar archive of the PostgreSQL data directory and compress it
+    if ! (tar -cf - "${POSTGRESQL_DATA}" | gzip -q -9 >"${backup_path}") 2>/dev/null; then
+        alenaal_error "Backup failed during compression"
+        rm -f "${backup_path}" 2>/dev/null || true
+        return 2
+    fi
+
+    # Verify backup was created
+    if [[ ! -f "${backup_path}" ]]; then
+        alenaal_error "Backup file was not created"
+        return 2
+    fi
+
+    # Display success message
+    alenaal_newline
+    alenaal_complete "DBMS backup successfully created" --bold
+    alenaal_format "Backup location: ${backup_path}" --color blue --indent 2
+    alenaal_format "Backup size: $(du -h "${backup_path}" | cut -f1)" --color blue --indent 2
+    alenaal_newline
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _backup_data
+#
+# Performs individual database backup using pg_dump.
+#
+# Can run interactively (listing databases and prompting) or non-interactively
+# with explicit database name. Creates compressed SQL dump.
+#
+# Args:
+#   $@ - Options: -d|--dbname, -b|--backup, -u|--username, -p|--password
+#
+# Returns:
+#   0 - Backup successful
+#   1 - Invalid arguments or missing credentials
+#   2 - Backup failed
+# -----------------------------------------------------------------------------
+_backup_data() {
+    local db_name=""
+    local username=""
+    local password=""
+    local backup_name=""
+    local backup_path=""
+
+    # Parse named arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -d|--dbname)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--dbname' requires an argument"
+                    return 1
+                fi
+                db_name="$2"
+                shift 2
+                ;;
+
+            -b|--backup)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--backup' requires an argument"
+                    return 1
+                fi
+                backup_name="$2"
+                shift 2
+                ;;
+
+            -u|--username)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--username' requires an argument"
+                    return 1
+                fi
+                username="$2"
+                shift 2
+                ;;
+            
+            -p|--password)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--password' requires an argument"
+                    return 1
+                fi
+                password="$2"
+                shift 2
+                ;;
+
+            *)
+                alenaal_error "Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # Check if required username and password are provided
+    if [[ -n "$username" && -n "$password" ]]; then
+        export PGUSER="${username}"     # Set the username for accessing the PostgreSQL database
+        export PGPASSWORD="${password}" # Set the password for the PostgreSQL database user
+    elif [[ -n "$username" || -n "$password" ]]; then
+        alenaal_error "Both username and password must be provided together"
+        return 1
+    fi
+
+    # Check if the PGUSER is 'postgres' and display a warning
+    if [[ "${PGUSER}" == "postgres" ]]; then
+        alenaal_warning "Backing up as 'postgres' superuser is not recommended"
+        alenaal_suggestion "Create a dedicated backup user with appropriate permissions"
+    fi
+
+    # Display welcome message
+    alenaal_welcome "Initializing database backup"
+    alenaal_newline
+
+    # If database name not provided, list databases and prompt
+    if [[ -z "$db_name" ]]; then
+        alenaal_format "Please select a database to back up. Here are your current databases:" --step --indent 2
+        alenaal_newline
+        list_databases
+        alenaal_ask "Enter the name of the database you wish to back up: " --indent 3
+        read -r db_name
+        if [[ -z "$db_name" ]]; then
+            alenaal_error "No database name provided"
+            return 1
+        fi
+        alenaal_newline
+    fi
+
+    # Check if the database exists
+    if ! database_exists "${db_name}"; then
+        alenaal_error "Database '${db_name}' not found"
+        return 2
+    fi
+
+    # Ensure backup directory exists
+    if ! _ensure_directory "${DATA_BACKUP_PATH}"; then
+        alenaal_error "Failed to create backup directory: ${DATA_BACKUP_PATH}"
+        return 2
+    fi
+
+    # Check if the backup file name is provided as an argument
+    if [[ -n "$backup_name" ]]; then
+        backup_path="${DATA_BACKUP_PATH}/${backup_name}.sql.gz"
+    else
+        # Set default backup file name if not provided
+        backup_path="${DATA_BACKUP_PATH}/${db_name}___$(date +'%Y_%m_%d__%H_%M_%S')___${DATA_BACKUP_FILE_SUFFIX}.sql.gz"
+    fi
+
+    alenaal_success "Database '${db_name}' found. Initiating backup process..." --indent 2
+    alenaal_newline
+
+    # Set database name
+    export PGDATABASE="${db_name}"
+
+    # Backup the database in a compressed format
+    if ! pg_dump | gzip -q -9 >"${backup_path}"; then
+        alenaal_error "Backup failed during database dump"
+        rm -f "${backup_path}" 2>/dev/null || true
+        return 2
+    fi
+
+    # Verify backup was created
+    if [[ ! -f "${backup_path}" ]]; then
+        alenaal_error "Backup file was not created"
+        return 2
+    fi
+
+    alenaal_complete "Backup successfully created"
+    alenaal_format "Backup location: ${backup_path}" --color blue --indent 2
+    alenaal_format "Backup size: $(du -h "${backup_path}" | cut -f1)" --color blue --indent 2
+    alenaal_newline
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _ensure_directory
+#
+# Ensures a directory exists, creating it if necessary.
+#
+# Args:
+#   $1 - directory: Directory path to ensure
+#
+# Returns:
+#   0 on success, 1 on failure
+# -----------------------------------------------------------------------------
+_ensure_directory() {
+    local directory="$1"
+
+    if [[ -z "$directory" ]]; then
+        return 1
+    fi
+
+    if [[ ! -d "$directory" ]]; then
+        mkdir -p "$directory" 2>/dev/null || return 1
+    fi
+
+    return 0
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

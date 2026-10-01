@@ -1,0 +1,138 @@
+# ============================================================================
+# R U F F  C O N F I G U R A T I O N
+# Production-grade configuration for Django/Python projects
+#
+# Inspired by:
+# - Django (django/django)          [style & conventions]
+# - Sentry (getsentry/sentry)       [ruff usage]
+# - Zulip (zulip/zulip)
+# - FastAPI (tiangolo/fastapi)
+# - Pydantic (pydantic/pydantic)
+# ============================================================================
+
+
+# ============================================================================
+# C O R E  S E T T I N G S
+# ============================================================================
+
+line-length = 88
+target-version = "py311"
+cache-dir = ".ruff_cache"
+
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "node_modules",
+    "static",
+    "media",
+    "migrations",
+]
+
+
+# ============================================================================
+# L I N T  R U L E S
+# ============================================================================
+
+[lint]
+
+# Core rule set used by large, real-world Python/Django codebases
+select = [
+    "F",    # Pyflakes: undefined names, logical errors
+    "E",    # Pycodestyle errors
+    "W",    # Pycodestyle warnings
+    "I",    # isort: import order
+    "B",    # flake8-bugbear: likely bugs
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade: modern Python syntax
+    "SIM",  # flake8-simplify
+    "ARG",  # flake8-unused-arguments
+    "PERF", # perflint
+    "PL",   # pylint-inspired (carefully curated subset)
+    "D",    # pydocstyle (docstring rules)
+]
+
+# Intentionally ignored rules for Django pragmatism
+ignore = [
+    "E501",    # Line length handled by formatter
+    "PLR0913", # Many arguments common in Django views/forms
+    "PLR2004", # Magic numbers common in permissions/status codes
+    "ARG002",  # Required unused args in Django callbacks
+]
+
+# Rules Ruff may auto-fix safely
+fixable = [
+    "I",   # Import sorting
+    "UP",  # Python syntax upgrades
+    "SIM", # Logical simplifications
+    "C4",  # Comprehension improvements
+    "D",   # Allow Ruff to auto-fix docstring issues like D202
+]
+
+# Rules that should never be auto-fixed
+unfixable = [
+    "B", # Bug-prone rules require human review
+]
+
+# ============================================================================
+# I M P O R T  S O R T I N G  ( I S O R T )
+# ============================================================================
+
+[lint.isort]
+
+combine-as-imports = true
+lines-after-imports = 2
+
+known-first-party = ["configs", "apps"]
+known-third-party = ["django", "rest_framework"]
+
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+
+# ============================================================================
+# C O M P L E X I T Y
+# ============================================================================
+
+[lint.mccabe]
+
+max-complexity = 10
+
+
+# ============================================================================
+# P E R - F I L E  O V E R R I D E S
+# ============================================================================
+
+[lint.per-file-ignores]
+
+# Tests are intentionally flexible
+"tests/**/*.py" = ["PLR2004", "ARG001", "ARG002"]
+
+# Django settings rely on wildcard imports
+"**/settings/*.py" = ["F403", "F405"]
+
+# Migrations are auto-generated
+"**/migrations/*.py" = ["ALL"]
+
+
+[lint.pydocstyle]
+
+# Google-style docstrings (widely used)
+convention = "google"
+
+
+# ============================================================================
+# F O R M A T T E R
+# ============================================================================
+
+[format]
+
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

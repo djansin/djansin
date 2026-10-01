@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-API_CMD="chown -R $(id -u):$(id -u) /packages"
-
-docker-compose run --rm api sh -c "${API_CMD}"

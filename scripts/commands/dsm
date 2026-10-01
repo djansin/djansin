@@ -1,0 +1,577 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: dsm (Docker Service Manager)
+# Description: Docker Compose service management with intelligent container routing
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="dsm"
+    [category]="docker"
+    [description]="Docker Service Manager - Intelligently route commands to appropriate containers"
+    [usage]="yarsin dsm <command> [OPTIONS] [SERVICES...]"
+    [version]="1.0.0"
+    [requires]="docker docker-compose"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+# -----------------------------------------------------------------------------
+# Docker Compose Configuration
+# -----------------------------------------------------------------------------
+# These variables define default Docker Compose behavior.
+# They can be overridden by environment variables.
+# -----------------------------------------------------------------------------
+
+# Compose file path
+: "${COMPOSE_FILE:=./compose.yml}"
+
+# Database service name
+: "${DB_SERVICE:=db}"
+
+# API/Django service name
+: "${API_SERVICE:=api}"
+
+# Client/Frontend service name
+: "${CLIENT_SERVICE:=client}"
+
+# Backup directory in containers
+: "${BACKUP_DIR:=/backups}"
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the dsm command.
+#
+# Description:
+#   Provides Docker Compose utilities with intelligent service routing:
+#   - Automatically routes commands to appropriate service containers
+#   - Supports database operations (backup, restore, recreate, bumng, psql)
+#   - Supports API, database, and client service shortcuts
+#   - Handles both running and stopped container scenarios
+#   - Manages user permissions with run-as
+#
+# Arguments:
+#   $1 - command: The command or service target to execute
+#   $@ - Additional arguments passed to the underlying command
+#
+# Service Targets:
+#   api, dja, django                        -> Route to API service
+#   db, pgs, postgresql                     -> Route to Database service
+#   front, vue, client                      -> Route to Client service
+#   backup, restore, recreate, bumng, psql  -> Database operations
+#   resetdb                                 -> Rebuild database from scratch
+#   opr                                     -> Generic operation (requires service)
+#   exec                                    -> Execute in running container
+#   run                                     -> Run in new container
+#
+# Options:
+#   -h, --help   Display help message
+#
+# Environment Variables:
+#   COMPOSE_FILE      Docker Compose file path (default: ./compose.yml)
+#   API_SERVICE       API service name (default: api)
+#   DB_SERVICE        Database service name (default: db)
+#   CLIENT_SERVICE    Client service name (default: client)
+#   BACKUP_DIR        Backup directory in containers (default: /backups)
+#
+# Returns:
+#   Exit code from the executed command
+# -----------------------------------------------------------------------------
+main() {
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    if [[ $# -eq 0 ]]; then
+        show_help
+        return 0
+    fi
+
+    local cmd="$1"
+    shift
+
+    # Check for help flag
+    if [[ "$cmd" == "--help" ]] || [[ "$cmd" == "-h" ]]; then
+        show_help
+        return 0
+    fi
+
+    # -------------------------------------------------------------------------
+    # Command Dispatcher
+    # -------------------------------------------------------------------------
+    case "$cmd" in
+        # Database operations (backup, restore, recreate, bumng, psql)
+        backup|restore|recreate|bumng|psql)
+            local command="yarsin $cmd $@"
+            _handle_safe_operation "$DB_SERVICE" "$command"
+            return $?
+            ;;
+
+        # Drop and recreate database.
+        resetdb)
+            local command="yarsin recreate \${POSTGRES_DB}"
+            _handle_safe_operation "$DB_SERVICE" "$command"
+            return $?
+            ;;
+
+        # API service shortcuts
+        api|dja|django)
+            local command="yarsin $@"
+            _handle_safe_operation "$API_SERVICE" "$command"
+            return $?
+            ;;
+
+        # Client/Frontend service shortcuts
+        front|vue|client)
+            local command="yarsin $@"
+            _handle_safe_operation "$CLIENT_SERVICE" "$command"
+            return $?
+            ;;
+        
+        # Database service shortcuts
+        db|pgs|postgres|postgresql)
+            local command="yarsin $@"
+            _handle_safe_operation "$DB_SERVICE" "$command"
+            return $?
+            ;;
+
+        # Generic operation with explicit service
+        opr)
+            if [[ $# -lt 1 ]]; then
+                alenaal_error "opr command requires a service name"
+                alenaal_suggestion "Usage: yarsin dsm opr <service> <command>"
+                return 1
+            fi
+            local service="$1"
+            shift
+            local command="$@"
+            _handle_operation "$service" "$command"
+            return $?
+            ;;
+
+        # Execute in running container
+        exec)
+            if [[ $# -lt 1 ]]; then
+                alenaal_error "exec command requires a service name"
+                alenaal_suggestion "Usage: yarsin dsm exec <service> <command>"
+                return 1
+            fi
+            local service="$1"
+            shift
+            local command="$@"
+            _handle_exec "$service" "$command"
+            return $?
+            ;;
+
+        # Run in new container
+        run)
+            if [[ $# -lt 1 ]]; then
+                alenaal_error "run command requires a service name"
+                alenaal_suggestion "Usage: yarsin dsm run <service> <command>"
+                return 1
+            fi
+            local service="$1"
+            shift
+            local command="$@"
+            _handle_run "$service" "$command"
+            return $?
+            ;;
+
+        # Default: try to run as API operation with yarsin command
+        *)
+            local command="yarsin $cmd $@"
+            _handle_safe_operation "$API_SERVICE" "$command"
+            return $?
+            ;;
+    esac
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the dsm command.
+#
+# Provides detailed information about Docker Compose utilities with
+# intelligent service routing and container management.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "dsm - Docker Service Manager" --header --icon "🐳"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Intelligently routes commands to the appropriate Docker containers," --indent 3
+    alenaal_format "handles user permissions, and manages service states." --indent 3 --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin dsm backup data                    # Database backup" --item --icon "⇢"
+    alenaal_format "yarsin dsm api python manage.py migrate   # Run in API container" --item --icon "⇢"
+    alenaal_format "yarsin dsm db psql -c 'SELECT 1'          # Run in DB container" --item --icon "⇢"
+    alenaal_format "yarsin dsm exec api bash                  # Exec into running container" --item --icon "⇢"
+    alenaal_format "yarsin dsm run api python manage.py -h    # Run in new container" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Service Shortcuts Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Service Shortcuts:" --section --option
+
+    alenaal_format "API Service:" --subsection
+    alenaal_format "api, dja, django" --list --bold --indent 4
+    alenaal_format "Routes command to API/Django container" --indent 5
+    alenaal_format "Example: yarsin dsm api python manage.py shell" --indent 5 --italic
+
+    alenaal_format "Database Service:" --subsection
+    alenaal_format "db, pgs, postgres, postgresql" --list --bold --indent 4
+    alenaal_format "Routes command to PostgreSQL container" --indent 5
+    alenaal_format "Example: yarsin dsm db psql -U postgres -d mydb" --indent 5 --italic
+
+    alenaal_format "Client Service:" --subsection
+    alenaal_format "front, vue, client" --list --bold --indent 4
+    alenaal_format "Routes command to client/frontend container" --indent 5
+    alenaal_format "Example: yarsin dsm front npm run build" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Database Operations Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Database Operations:" --section --info
+
+    alenaal_format "backup [type]" --item --list --bold
+    alenaal_format "Backup database (data or dbms)" --indent 4
+
+    alenaal_format "restore [type]" --item --list --bold
+    alenaal_format "Restore database from backup" --indent 4
+
+    alenaal_format "recreate [dbname]" --item --list --bold
+    alenaal_format "Drop and recreate database" --indent 4
+
+    alenaal_format "bumng <subcommand>" --item --list --bold
+    alenaal_format "Backup management (list, delete, rename)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Container Commands Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Container Commands:" --section --option
+
+    alenaal_format "exec <service> <command>" --item --list --bold
+    alenaal_format "Execute command in running container" --indent 4
+    alenaal_format "Container must be already running" --indent 4 --italic
+
+    alenaal_format "run <service> <command>" --item --list --bold
+    alenaal_format "Run command in new container" --indent 4
+    alenaal_format "Container is removed after execution" --indent 4 --italic
+
+    alenaal_format "opr <service> <command>" --item --list --bold
+    alenaal_format "Generic operation (auto-detects exec vs run)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "COMPOSE_FILE" --item --list --bold
+    alenaal_format "Docker Compose file path (default: ./compose.yml)" --indent 4
+
+    alenaal_format "API_SERVICE" --item --list --bold
+    alenaal_format "API service name (default: api)" --indent 4
+
+    alenaal_format "DB_SERVICE" --item --list --bold
+    alenaal_format "Database service name (default: db)" --indent 4
+
+    alenaal_format "CLIENT_SERVICE" --item --list --bold
+    alenaal_format "Client service name (default: client)" --indent 4
+
+    alenaal_format "BACKUP_DIR" --item --list --bold
+    alenaal_format "Backup directory in containers (default: /backups)" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "API Operations:" --subsection --italic
+    alenaal_format "yarsin dsm api python manage.py migrate           # Run migrations" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm api python manage.py createsuperuser   # Create superuser" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm api python manage.py shell --plain     # Django shell" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm api pytest --cov --tb=short            # Run tests" --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "Database Operations:" --subsection --italic
+    alenaal_format "yarsin dsm backup data                            # Database dump" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm recreate myapp                         # Recreate DB" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm opr db psql -U postgres -c 'SELECT 1'  # Query database" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm opr db pg_dump mydb > backup.sql       # Manual dump" --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "Client Operations:" --subsection --italic
+    alenaal_format "yarsin dsm front npm install                       # Install deps" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm front npm run build                     # Build assets" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm front npm run dev                       # Start dev server" --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "Container Management:" --subsection --italic
+    alenaal_format "yarsin dsm exec api bash                            # Interactive shell" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm exec api python manage.py dbshell        # DB shell via API" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm run api python test.py                   # One-off script" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm opr db 'pg_dump mydb | gzip > backup.gz' # Custom command" --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    alenaal_format "Backup Management:" --subsection --italic
+    alenaal_format "yarsin dsm bumng list --dbms --limit 10            # List DBMS backups" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm bumng delete old_backup.tar.gz          # Delete backup" --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin dsm bumng rename old.sql.gz new.sql.gz      # Rename backup" --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Auto-detection Logic Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Auto-detection Logic:" --section --tip
+    alenaal_format "The command intelligently determines whether to use exec or run:" --indent 3
+
+    alenaal_format "If the target service is running → uses 'exec' (faster)" --list --indent 4
+    alenaal_format "If the target service is not running → uses 'run' (starts new container)" --list --indent 4
+    alenaal_format "For backup operations, automatically handles service state" --list --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # User Permission Handling Section
+    # -------------------------------------------------------------------------
+    alenaal_format "User Permission Handling:" --section --tip
+    alenaal_format "Commands automatically run with your host user's UID using run-as:" --indent 3
+
+    alenaal_format "Ensures file ownership matches your host user" --list --indent 4
+    alenaal_format "Prevents permission issues with mounted volumes" --list --indent 4
+    alenaal_format "Current UID: $(id -u)" --list --indent 4 --bold
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Docker installed and running" --item --list
+    alenaal_format "docker-compose or docker compose plugin" --item --list
+    alenaal_format "Valid compose.yml file with configured services" --item --list
+    alenaal_format "run-as utility for user permission management" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0   - Command executed successfully" --item --list
+    alenaal_format "1   - Invalid arguments or command not found" --item --list
+    alenaal_format "2   - Service operation failed" --item --list
+    alenaal_format ">0  - Exit code from docker-compose or subcommand" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for Docker Compose operations.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _handle_safe_operation
+#
+# Handles operations with user permission management (run-as).
+#
+# Args:
+#   $1 - service: Target service name
+#   $2 - command: Command to execute (with yarsin)
+#
+# Returns:
+#   Exit code from the operation
+# -----------------------------------------------------------------------------
+_handle_safe_operation() {
+    local service="$1"
+    local command="run-as $(id -u) -- $2"
+
+    _handle_operation "$service" "$command"
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _handle_operation
+#
+# Generic operation handler that auto-detects exec vs run.
+#
+# Args:
+#   $1 - service: Target service name
+#   $2 - command: Command to execute
+#
+# Returns:
+#   Exit code from the operation
+# -----------------------------------------------------------------------------
+_handle_operation() {
+    local service="$1"
+    local command="$2"
+
+    # Check if service is available
+    if _check_service_status "${service}"; then
+        # Service is running - use exec
+        _handle_exec "$service" "$command"
+    else
+        # Service not running - use run
+        _handle_run "$service" "$command"
+    fi
+
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _handle_exec
+#
+# Executes a command in a running container.
+#
+# Args:
+#   $1 - service: Service name
+#   $2 - command: Command and arguments to execute
+#
+# Returns:
+#   Exit code from the executed command
+# -----------------------------------------------------------------------------
+_handle_exec() {
+    if [[ $# -lt 2 ]]; then
+        alenaal_error "Usage: _handle_exec <service> <command>"
+        return 1
+    fi
+
+    local service="$1"
+    local command="$2"
+
+    if ! _check_service_status "${service}"; then
+        alenaal_error "Service '$service' is not running"
+        alenaal_suggestion "Start the service first: docker compose -f ${COMPOSE_FILE} up -d $service"
+        return 1
+    fi
+
+    docker compose -f "${COMPOSE_FILE}" exec "${service}" bash -c "$command"
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _handle_run
+#
+# Runs a command in a new container.
+#
+# Args:
+#   $1 - service: Service name
+#   $2 - command: Command and arguments to run
+#
+# Returns:
+#   Exit code from the executed command
+# -----------------------------------------------------------------------------
+_handle_run() {
+    if [[ $# -lt 2 ]]; then
+        alenaal_error "Usage: _handle_run <service> <command>"
+        return 1
+    fi
+
+    local service="$1"
+    local command="$2"
+
+    docker compose -f "${COMPOSE_FILE}" run --rm "${service}" bash -c "$command"
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Function: _check_service_status
+#
+# Checks if a Docker Compose service is running.
+#
+# Args:
+#   $1 - service: Service name to check
+#
+# Returns:
+#   0 if service is running, 1 otherwise
+# -----------------------------------------------------------------------------
+_check_service_status() {
+    local service="$1"
+
+    if [[ -z "$service" ]]; then
+        return 1
+    fi
+
+    # Check if service is in running state
+    if docker compose -f "${COMPOSE_FILE}" ps --services --filter "status=running" 2>/dev/null | grep -q "^${service}$"; then
+        return 0
+    fi
+
+    return 1
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

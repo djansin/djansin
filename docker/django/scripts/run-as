@@ -1,0 +1,546 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# run-as - Execute Commands as Specific User
+# =============================================================================
+# Description: Executes commands as a user specified by UID or username.
+#              Automatically creates the user with default settings if it 
+#              doesn't exist. Supports both UID and username specification.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Path Resolution
+# -----------------------------------------------------------------------------
+# Determines script directory and canonical project paths for consistent
+# file location regardless of how the script is invoked.
+# -----------------------------------------------------------------------------
+WORKDIR=$(cd $(dirname "$0") && pwd)                # Script's directory
+PROJECT_PATH=$(realpath "$WORKDIR")                 # Resolve symlinks to absolute path
+YARSIN_LIB_PATH="${PROJECT_PATH}/yarsin-libs"
+
+YARSIN_CORE_PATH="${YARSIN_LIB_PATH}/core"
+
+# -----------------------------------------------------------------------------
+# Core Library Loading
+# -----------------------------------------------------------------------------
+# Loads shared functionality libraries that provide common utilities,
+# formatted output, and constants used throughout the dispatcher.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/constants.sh"                  # Constants and configuration
+source "${YARSIN_CORE_PATH}/alenaal.sh"                    # Formatted output functions
+source "${YARSIN_CORE_PATH}/utils.sh"                      # Utility helpers
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main entry point for the run-as command.
+#
+# Parses command-line arguments, resolves user identity (UID/username),
+# creates the user if necessary, and executes the specified command.
+#
+# Args:
+#   Options:
+#     -i, --uid UID       : Numeric user ID to execute as
+#     -n, --username NAME : Username to execute as
+#     -c, --command CMD   : Command to execute
+#     -h, --help         : Display help message
+#     --                  : Separator for command
+#   Positional:
+#     UID                 : Numeric user ID (if no flags used)
+#
+# Returns:
+#   Exit code of the executed command, or error code:
+#     0   - Success
+#     1   - General error (invalid options, user creation failed)
+#     2   - No command specified
+# -----------------------------------------------------------------------------
+main() {
+    local user=""
+    local user_id=""
+    local username=""
+    local command=()
+
+    # Parse flags and arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            # UID specification
+            -i|--uid)
+                # Validate numeric UID
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--uid' requires a numeric argument"
+                    return 1
+                fi
+                if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+                    alenaal_error "Invalid UID format: '$2' (must be numeric)"
+                    return 1
+                fi
+                user_id="$2"
+                shift 2
+                ;;
+
+            # Username specification
+            -n|--username)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--username' requires an argument"
+                    return 1
+                fi
+                if [[ "$2" =~ ^[0-9]+$ ]]; then
+                    alenaal_error "Invalid username format: '$2' (cannot be numeric)"
+                    return 1
+                fi
+                username="$2"
+                shift 2
+                ;;
+
+            -c|--command)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--command' requires an argument"
+                    return 1
+                fi
+                command+=("$2")
+                shift 2
+                ;;
+
+            # End of options, start of command
+            --)
+                shift
+                if [[ $# -eq 0 ]]; then
+                    alenaal_error "No command provided after '--' separator"
+                    return 1
+                fi
+                command+=("$@")
+                break
+                ;;
+
+            # Unknown option starting with dash
+            -*)
+                alenaal_error "Unknown option: $1"
+                return 1
+                ;;
+
+            # Positional argument - should be UID if no flags
+            *)
+                # Validate numeric UID
+                if [[ ! "$1" =~ ^[0-9]+$ ]]; then
+                    alenaal_error "Invalid UID format: '$1' (must be numeric)"
+                    return 1
+                fi
+                if [[ -n "${user_id}" ]]; then
+                    alenaal_error "Multiple UIDs specified: '${user_id}' and '$1'"
+                    return 1
+                fi
+                user_id="$1"
+                shift
+                ;;
+        esac
+    done
+
+    # If no user specified, use current user's UID
+    if [[ -z "${user_id}" ]] && [[ -z "${username}" ]]; then
+        user_id="$(id -u)"
+    fi
+
+    # Resolve username from UID if needed
+    if [[ -z "${username}" ]] && [[ -n "${user_id}" ]]; then
+        if id "${user_id}" &>/dev/null; then
+            username=$(id -un "${user_id}" 2>/dev/null)
+        else
+            # Generate a username from UID if user doesn't exist
+            username="user${user_id}"
+        fi
+    fi
+
+    # Resolve UID from username if needed
+    if [[ -z "${user_id}" ]] && [[ -n "${username}" ]]; then
+        if id "${username}" &>/dev/null; then
+            user_id=$(id -u "${username}" 2>/dev/null)
+        else
+            # Generate a UID from username hash if user doesn't exist
+            # This ensures consistent UID mapping for the same username
+            user_id=$(_generate_uid_from_username "${username}")
+        fi
+    fi
+
+    # Validate user existence and consistency
+    if id "${user_id}" &>/dev/null; then
+        local existing_username
+        existing_username=$(id -un "${user_id}" 2>/dev/null)
+        
+        if [[ -n "${username}" ]] && [[ "${existing_username}" != "${username}" ]]; then
+            alenaal_error "User ID conflict: UID ${user_id} belongs to '${existing_username}', not '${username}'"
+            return 1
+        fi
+        user="${existing_username}"
+    elif id "${username}" &>/dev/null; then
+        # User exists by username but not by UID (unlikely but handle it)
+        local existing_uid
+        existing_uid=$(id -u "${username}" 2>/dev/null)
+        
+        if [[ "${existing_uid}" != "${user_id}" ]]; then
+            alenaal_error "Username conflict: '${username}' has UID ${existing_uid}, not ${user_id}"
+            return 1
+        fi
+        user="${username}"
+    fi
+
+    # Create user if it doesn't exist
+    if [[ -z "${user}" ]]; then
+        alenaal_info "Creating user '${username}' with UID ${user_id}"
+        user=$(_create_user "${username}" "${user_id}")
+        if [[ $? -ne 0 ]]; then
+            alenaal_error "Failed to create user: ${username} (UID: ${user_id})"
+            return 1
+        fi
+        alenaal_success "User '${user}' created successfully"
+    fi
+
+    # Validate command presence
+    if [[ ${#command[@]} -eq 0 ]]; then
+        alenaal_error "No command specified to execute"
+        show_help
+        return 2
+    fi
+
+    # Execute the command
+    _execute_as_user "${user}" "${command[@]}"
+
+    return $?
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help documentation for the run-as command.
+#
+# Provides detailed information about usage, options, user resolution logic,
+# examples, exit codes, and requirements using the alenaal formatting system.
+# Organized into logical sections for easy navigation and understanding.
+#
+# Args:
+#   None
+#
+# Returns:
+#   0 - Help displayed successfully
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "run-as - Execute Commands as Specific User" --header --icon "👤"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section
+    alenaal_format "Executes commands as a user specified by UID or username. Automatically" --item
+    alenaal_format "creates the user with default settings if it doesn't exist. Supports both" --item
+    alenaal_format "UID and username specification with intelligent resolution." --item
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "run-as [OPTIONS] [UID] [-- COMMAND]" --item
+    alenaal_format "run-as --uid UID --command COMMAND" --item
+    alenaal_format "run-as --username NAME --command COMMAND" --item
+    alenaal_format "run-as UID -- COMMAND" --item
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+    alenaal_format --item --list --bold -- "-i, --uid UID"
+    alenaal_format "Numeric user ID to execute as (e.g., 1000, 1001)" --indent 4
+
+    alenaal_format --item --list --bold -- "-n, --username NAME"
+    alenaal_format "Username to execute as (e.g., www-data, appuser)" --indent 4
+
+    alenaal_format --item --list --bold -- "-c, --command CMD"
+    alenaal_format "Command to execute (can be specified multiple times)" --indent 4
+
+    alenaal_format --item --list --bold -- "--"
+    alenaal_format "Separator to explicitly mark the start of command arguments" --indent 4
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # User Resolution Logic Section
+    # -------------------------------------------------------------------------
+    alenaal_format "User Resolution Logic:" --section --info
+    alenaal_format "1. If UID specified, try to resolve username from UID" --item
+    alenaal_format "2. If username specified, try to resolve UID from username" --item
+    alenaal_format "3. If no user specified, use current user's UID" --item
+    alenaal_format "4. If user doesn't exist, create with default settings:" --item
+    alenaal_format "No password (locked account)" --icon "•" --indent 4
+    alenaal_format "No home directory" --icon "•" --indent 4
+    alenaal_format "Bash shell" --icon "•" --indent 4
+    alenaal_format "Group with same GID as UID" --icon "•" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+    alenaal_format "run-as 1000 -- whoami" --item --icon "⇢" --bold
+    alenaal_format "Run 'whoami' as UID 1000 (creates user if needed)" --indent 4
+
+    alenaal_format "run-as --username www-data --command 'nginx -t'" --item --icon "⇢" --bold
+    alenaal_format "Test nginx configuration as www-data user" --indent 4
+
+    alenaal_format "run-as --uid 1001 -- bash -c 'echo Hello'" --item --icon "⇢" --bold
+    alenaal_format "Run a bash command as UID 1001" --indent 4
+
+    alenaal_format "run-as --username appuser --command python --command -c 'print(42)'" --item --icon "⇢" --bold
+    alenaal_format "Execute Python one-liner as appuser" --indent 4
+
+    alenaal_format "run-as 1000 -- /usr/local/bin/backup.sh" --item --icon "⇢" --bold
+    alenaal_format "Run backup script as UID 1000" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --warning
+    alenaal_format "0   - Command executed successfully" --item --list
+    alenaal_format "1   - General error (invalid options, user creation failed)" --item --list
+    alenaal_format "2   - No command specified" --item --list
+    alenaal_format ">0  - Exit code of the executed command (if command failed)" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Root privileges or sudo access to create users" --item --list
+    alenaal_format "One of: sudo, runuser, or su available" --item --list
+    alenaal_format "useradd/groupadd commands (for user creation)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Executes a command as a specified user using available privilege escalation.
+#
+# Determines the appropriate privilege escalation method (sudo, runuser, or su)
+# and executes the command with the correct syntax for each method.
+#
+# Args:
+#   $1: username - Target username for command execution
+#   $@: command_args - Command and its arguments to execute
+#
+# Returns:
+#   Exit code of the executed command, or:
+#     1 - No privilege escalation method available
+# -----------------------------------------------------------------------------
+_execute_as_user() {
+    local username="$1"
+    shift
+    local command_args=("$@")
+
+    # Validate username
+    if [[ -z "$username" ]]; then
+        alenaal_error "Username cannot be empty"
+        return 1
+    fi
+
+    # Validate command exists
+    if [[ ${#command_args[@]} -eq 0 ]]; then
+        alenaal_error "No command specified to execute"
+        return 1
+    fi
+
+    # Get privilege escalation wrapper
+    local privilege_wrapper
+    privilege_wrapper=$(_get_privilege_wrapper)
+    if [[ $? -ne 0 ]]; then
+        alenaal_error "No privilege escalation method available (sudo, runuser, or su)"
+        return 1
+    fi
+
+    # Execute the command as the specified user
+    case "$privilege_wrapper" in
+        sudo)
+            # sudo -u username -- command with arguments
+            sudo -u "$username" -- "${command_args[@]}"
+            ;;
+        runuser)
+            # runuser -u username -- command with arguments
+            # Note: -s option cannot be used with -u, they are mutually exclusive
+            runuser -u "$username" -- "${command_args[@]}"
+            ;;
+        su)
+            # su -c "command with arguments" username
+            # Properly escape the command string for su
+            local cmd_str
+            printf -v cmd_str '%q ' "${command_args[@]}"
+            su -c "${cmd_str}" "$username"
+            ;;
+        *)
+            alenaal_error "Unsupported privilege wrapper: $privilege_wrapper"
+            return 1
+            ;;
+    esac
+
+    return $?
+}
+
+# -----------------------------------------------------------------------------
+# Detects available privilege escalation methods on the system.
+#
+# Checks for sudo, runuser, and su in order of preference and returns the
+# first available method. This allows the script to work across different
+# Unix-like systems and container environments.
+#
+# Args:
+#   None
+#
+# Returns:
+#   Prints the name of the available wrapper: "sudo", "runuser", or "su"
+#   Returns non-zero exit code if no method is available
+# -----------------------------------------------------------------------------
+_get_privilege_wrapper() {
+    # Check for sudo first (preferred)
+    if command -v sudo >/dev/null 2>&1; then
+        # Verify sudo works without password for this command
+        if sudo -n true 2>/dev/null; then
+            echo "sudo"
+            return 0
+        fi
+    fi
+
+    # Check for runuser (common in container environments)
+    if command -v runuser >/dev/null 2>&1; then
+        echo "runuser"
+        return 0
+    fi
+
+    # Check for su (always available on Unix-like systems)
+    if command -v su >/dev/null 2>&1; then
+        echo "su"
+        return 0
+    fi
+
+    # No privilege escalation method found
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Creates a new system user with specified UID and optional GID.
+#
+# Handles user creation including group creation with the same GID.
+# Creates minimal users with locked password, no home directory, and bash shell.
+#
+# Args:
+#   $1: username - Username for the new user
+#   $2: uid - Numeric UID for the new user
+#   $3: gid - Optional numeric GID (defaults to same as UID)
+#
+# Returns:
+#   0 and prints username on success
+#   1 - Invalid parameters
+#   2 - User/group creation failed
+# -----------------------------------------------------------------------------
+_create_user() {
+    local username="$1"
+    local uid="$2"
+    local gid="${3:-$2}"
+
+    # Validation
+    if [[ -z "$username" ]]; then
+        alenaal_error "Username cannot be empty"
+        return 1
+    fi
+    
+    if [[ -z "$uid" ]] || [[ ! "$uid" =~ ^[0-9]+$ ]]; then
+        alenaal_error "UID must be a positive number"
+        return 1
+    fi
+
+    if [[ -z "$gid" ]] || [[ ! "$gid" =~ ^[0-9]+$ ]]; then
+        alenaal_error "GID must be a positive number"
+        return 1
+    fi
+
+    # Check if user already exists
+    if id "$username" &>/dev/null; then
+        echo "$username"
+        return 0
+    fi
+
+    # Check if UID is already in use
+    if id "$uid" &>/dev/null; then
+        local existing_user
+        existing_user=$(id -un "$uid" 2>/dev/null)
+        alenaal_error "UID $uid is already used by user '$existing_user'"
+        return 2
+    fi
+
+    # Create group if it doesn't exist
+    if ! getent group "$gid" &>/dev/null; then
+        if ! groupadd -g "$gid" "$username" 2>/dev/null; then
+            alenaal_error "Failed to create group '$username' with GID $gid"
+            return 2
+        fi
+    fi
+
+    # Create user
+    if useradd -u "$uid" -g "$gid" \
+               --password '!!' \
+               --no-create-home \
+               --shell /bin/bash \
+               --comment "Automatically created by run-as" \
+               "$username" 2>/dev/null; then
+        echo "$username"
+        return 0
+    else
+        alenaal_error "Failed to create user '$username' with UID $uid"
+        return 2
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# Generates a deterministic UID from a username string.
+#
+# Creates a consistent UID mapping for usernames by using a hash function.
+# This ensures the same username always gets the same UID when created.
+#
+# Args:
+#   $1: username - Username to generate UID for
+#
+# Returns:
+#   Numeric UID between 1000 and 65534
+# -----------------------------------------------------------------------------
+_generate_uid_from_username() {
+    local username="$1"
+    
+    # Simple hash function to generate UID from username
+    # This ensures the same username always gets the same UID
+    local hash=0
+    for ((i=0; i<${#username}; i++)); do
+        # Get ASCII value of character
+        printf -v charcode "%d" "'${username:$i:1}"
+        hash=$(( (hash * 31 + charcode) % 64535 ))
+    done
+    
+    # Ensure UID is in the dynamic range (1000-65534)
+    echo $(( hash + 1000 ))
+}
+
+
+# =============================================================================
+# SCRIPT ENTRY POINT
+# =============================================================================
+main "$@"

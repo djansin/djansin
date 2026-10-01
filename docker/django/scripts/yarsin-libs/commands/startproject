@@ -1,0 +1,365 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: startproject
+# Description: Create a new Django project with optimized structure
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# COMMAND METADATA
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="startproject"
+    [category]="django"
+    [description]="Create a new Django project with optimized structure"
+    [usage]="yarsin startproject [PROJECT_NAME] [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="python django-admin"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit script immediately if a command fails
+set -o pipefail # Exit script when a command in a pipeline fails
+set -o nounset  # Treat unset variables as errors
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the startproject command.
+#
+# Description:
+#   Creates a new Django project in the configured work directory.
+#   Uses intelligent defaults: project name from argument, environment,
+#   or falls back to 'configs'.
+#
+# Arguments:
+#   PROJECT_NAME - Name of the Django project (optional)
+#                 Default: ${PROJECT_NAME:-configs}
+#
+# Options:
+#   -n, --name NAME   Project name (overrides positional argument)
+#   -h, --help        Display this help message
+#
+# Environment Variables:
+#   WORK_DIRECTORY    Base directory for project creation (required)
+#   PROJECT_NAME      Default project name if not specified
+#
+# Returns:
+#   0 - Project created successfully
+#   1 - Missing required arguments or invalid options
+#   2 - Project creation failed
+# -----------------------------------------------------------------------------
+main() {
+    local project_name=""
+    local project_dir="${WORK_DIRECTORY:-}"
+
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+            
+            -n|--name)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--name' requires an argument"
+                    return 1
+                fi
+                if [[ -n "$project_name" ]]; then
+                    alenaal_error "Project name already specified: '${project_name}'"
+                    return 1
+                fi
+                project_name="$2"
+                shift 2
+                ;;
+
+            --)
+                shift
+                if [[ -z "$project_name" && -n "$1" ]]; then
+                    project_name="$1"
+                fi
+                break
+                ;;
+
+            -*)
+                alenaal_error "Unknown option: '$1'"
+                alenaal_suggestion "Use 'yarsin startproject --help' for usage information"
+                return 1
+                ;;
+
+            *)
+                if [[ -n "$project_name" ]]; then
+                    alenaal_error "Multiple project names specified: '${project_name}' and '$1'"
+                    return 1
+                fi
+                project_name="$1"
+                shift
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Validate Inputs
+    # -------------------------------------------------------------------------
+    # Set default project name if not provided
+    project_name="${project_name:-${PROJECT_NAME:-configs}}"
+    
+    # Validate WORK_DIRECTORY is set
+    if [[ -z "${project_dir}" ]]; then
+        alenaal_error "WORK_DIRECTORY environment variable is not set"
+        alenaal_suggestion "Set WORK_DIRECTORY to the desired project location"
+        alenaal_suggestion "Example: export WORK_DIRECTORY=/path/to/projects"
+        return 1
+    fi
+
+    # Validate project directory exists
+    if [[ ! -d "${project_dir}" ]]; then
+        if ! mkdir -p "${project_dir}"; then
+            alenaal_error "Failed to create project directory: ${project_dir}"
+            return 2
+        fi
+    fi
+
+    # Check if project already exists
+    if [[ -d "${project_dir}/${project_name}" ]]; then
+        alenaal_error "Project '${project_name}' already exists at: ${project_dir}/${project_name}"
+        alenaal_suggestion "Use a different project name or remove the existing directory"
+        return 2
+    fi
+
+    # -------------------------------------------------------------------------
+    # Create Django Project
+    # -------------------------------------------------------------------------
+    alenaal_info "Creating Django project '${project_name}' in ${project_dir}"
+    
+    if ! django-admin startproject "${project_name}" "${project_dir}" 2>/dev/null; then
+        alenaal_error "Failed to create Django project: ${project_name}"
+        return 2
+    fi
+
+    alenaal_success "Django project '${project_name}' created successfully"
+    alenaal_info "Project location: ${project_dir}/${project_name}"
+    
+    return 0
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the startproject command.
+#
+# Provides detailed information about creating Django projects with
+# proper configuration and best practices.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "startproject - Create Django Project" --header --icon "🏗️ "
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Creates a new Django project in the configured WORK_DIRECTORY" --item
+    alenaal_format "with intelligent defaults and validation." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin startproject myproject" --item --icon "⇢"
+    alenaal_format "yarsin startproject --name myproject" --item --icon "⇢"
+    alenaal_format "PROJECT_NAME=myproject yarsin startproject" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+
+    alenaal_format  --item --list --bold -- "-n, --name NAME"
+    alenaal_format "Project name (overrides positional argument and PROJECT_NAME)" --indent 4
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Arguments Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Arguments:" --section --info
+    alenaal_format "PROJECT_NAME" --item --list --bold
+    alenaal_format "Name of the Django project to create" --indent 4
+    alenaal_format "Default: \${PROJECT_NAME:-configs}" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "WORK_DIRECTORY" --item --list --bold
+    alenaal_format "Base directory for project creation (REQUIRED)" --indent 4
+    alenaal_format "Example: /home/user/projects" --indent 4 --italic
+
+    alenaal_format "PROJECT_NAME" --item --list --bold
+    alenaal_format "Default project name when not provided as argument" --indent 4
+    alenaal_format "Default: 'configs'" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Basic usage with positional argument" --subsection --italic
+    alenaal_format "export WORK_DIRECTORY=~/projects" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin startproject myblog" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates project at ~/projects/myblog" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Using --name option" --subsection --italic
+    alenaal_format "export WORK_DIRECTORY=/app" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin startproject --name backend" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates project at /app/backend" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Using environment variable" --subsection --italic
+    alenaal_format "export WORK_DIRECTORY=/opt/django" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export PROJECT_NAME=api" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin startproject" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates project at /opt/django/api" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Custom project name and directory" --subsection --italic
+    alenaal_format "export WORK_DIRECTORY=/home/user/workspace" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin startproject ecommerce" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates project at /home/user/workspace/ecommerce" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "With error handling example" --subsection --italic
+    alenaal_format "export WORK_DIRECTORY=/invalid/path" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin startproject myapp" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "# Error: WORK_DIRECTORY directory does not exist" --indent 5 --italic
+    alenaal_format "# The command will create the directory automatically" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Generated Structure Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Generated Structure:" --section --example
+    alenaal_format "The command creates the standard Django project structure:" --item
+
+    alenaal_format "PROJECT_NAME/" --item --list --bold --indent 4
+    alenaal_format "├─ manage.py" --indent 6
+    alenaal_format "├─ PROJECT_NAME/" --indent 6
+    alenaal_format "│  ├─ __init__.py" --indent 6
+    alenaal_format "│  ├─ asgi.py" --indent 6
+    alenaal_format "│  ├─ settings.py" --indent 6
+    alenaal_format "│  ├─ urls.py" --indent 6
+    alenaal_format "│  └─ wsgi.py" --indent 6
+    alenaal_newline
+
+    alenaal_format "Note: For multi-environment settings structure, use:" --item --italic
+    alenaal_format "yarsin init ${project_name:-PROJECT_NAME}" --item --icon "⇢" --indent 4 --bold
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Next Steps Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Next Steps:" --section --tip
+    alenaal_format "After creating your project, you can:" --item
+
+    alenaal_format "1. Set up multi-environment settings (recommended):" --item --list --indent 4
+    alenaal_format "yarsin init" --indent 6 --bold
+
+    alenaal_format "2. Create Django apps:" --item --list --indent 4
+    alenaal_format "yarsin startapp blog" --indent 6 --bold
+
+    alenaal_format "3. Run initial migrations:" --item --list --indent 4
+    alenaal_format "yarsin django-admin migrate" --indent 6 --bold
+
+    alenaal_format "4. Start development server:" --item --list --indent 4
+    alenaal_format "yarsin django-admin runserver" --indent 6 --bold
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Python 3.13+" --item --list
+    alenaal_format "Django 5.2+" --item --list
+    alenaal_format "django-admin in PATH" --item --list
+    alenaal_format "WORK_DIRECTORY environment variable set" --item --list
+    alenaal_format "Write permissions in WORK_DIRECTORY" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Exit Codes Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Exit Codes:" --section --info
+    alenaal_format "0 - Project created successfully" --item --list
+    alenaal_format "1 - Invalid options or missing WORK_DIRECTORY" --item --list
+    alenaal_format "2 - Project creation failed (directory exists, django-admin error)" --item --list
+    alenaal_newline
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"

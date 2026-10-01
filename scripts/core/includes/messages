@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+settings_module_not_found() {
+    local settings_path="${WORK_DIRECTORY}/$(convert_dotted_path_to_slash "${DJANGO_SETTINGS_MODULE}")"
+
+    alenaal_newline
+    alenaal_error "Django settings module not found: ${settings_path}.py"
+    alenaal_newline
+
+    alenaal_suggestion "The DJANGO_SETTINGS_MODULE environment variable is set to:"
+    alenaal_format "${DJANGO_SETTINGS_MODULE}" --indent 2 --color cyan
+    alenaal_newline
+
+    alenaal_suggestion "To resolve this issue:"
+    alenaal_format "1. Ensure you are in the correct Django project directory" --indent 2
+    alenaal_format "2. Verify that the settings module file exists at the path above" --indent 2
+    alenaal_format "3. Check that DJANGO_SETTINGS_MODULE is properly configured" --indent 2
+    alenaal_newline
+    
+    alenaal_suggestion "To create a new Django project, use one of these commands:"
+    alenaal_format "yarsin startproject <project_name>" --indent 2 --icon "🚀"
+    alenaal_format "yarsin init <project_name>" --indent 2 --icon "✨"
+    alenaal_newline
+
+    alenaal_suggestion "For more information, run:"
+    alenaal_format "yarsin startproject --help" --indent 2 --icon "⇢"
+    alenaal_newline
+}

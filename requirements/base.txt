@@ -1,10 +1,21 @@
-## Building Powerful Web Applications with Django and Environment Variable Management
-Django==5.2.8                           # Core Python web framework used to build scalable, secure, and maintainable applications.
-django-environ==0.12.0                  # Environment variable management for secure and flexible configuration handling.
+# Core Framework & Environment Management
+Django>=5.2,<5.3                        # Core Python web framework used to build scalable, secure, and maintainable applications.
+django-environ~=0.12                    # Environment variable management for secure and flexible configuration handling.
+djangorestframework>=3.17,<3.18         # Toolkit for building RESTful APIs with Django, including serializers, views, and authentication.
 
-daphne==4.2.1                           # ASGI server that enables Django Channels to support asynchronous requests and WebSockets.
-channels==4.3.1                         # Framework for handling WebSockets and asynchronous features in Django.
+# Authentication & Security
+django-cors-headers>=4.9,<5.0           # Handles Cross-Origin Resource Sharing (CORS) headers for accepting requests from trusted external domains.
+djangorestframework-simplejwt>=5.5,<6.0 # JSON Web Token (JWT) authentication for DRF. Provides access and refresh tokens with rotation support.
 
-# Pillow==12.0.0                          # Python Imaging Library for image processing capabilities, required for Django ImageField operations.
-# django-imagekit==6.0.0                  # Advanced image processing for Django with on-the-fly generation
-# django-cleanup==9.0.0                   # Automatically delete old image files when models are deleted
+# Image Processing (Minimal)
+Pillow>=12.3,<12.4                      # Required for ImageField support.
+
+# Searching & Filtering
+django-filter>=26.1,<27.0               # Provides dynamic queryset filtering from request query parameters.
+
+# Phone Number Handling
+phonenumbers>=9.0,<10.0                 # Google's libphonenumber Python port for phone number parsing, validation, and formatting.
+django-phonenumber-field>=8.5,<9.0      # Phone number field for Django models with international validation and formatting.
+
+# Date & Time (Internationalization/Localization)
+jdatetime>=5.3,<6.0                     # Jalali (Persian) calendar implementation for Python.

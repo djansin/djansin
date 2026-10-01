@@ -1,14 +1,24 @@
 -r base.txt
 
 ## Database Connectivity
-psycopg2-binary==2.9.11                 # PostgreSQL adapter for Python that provides efficient database communication.
+psycopg2-binary>=2.9,<3.0               # PostgreSQL adapter for Python that provides efficient database communication.
 
 ## Code Quality and Formatting Tools
-isort==5.13.2                           # Tool that automatically organizes and orders Python imports.
-flake8==7.0.0                           # Linting tool for enforcing Python code style and detecting common issues.
-Flake8-pyproject==1.2.3                 # Flake8 extension that allows configuration through pyproject.toml.
-black==24.3.0                           # Opinionated code formatter for maintaining consistent code style across the project.
+ruff~=0.14                              # An extremely fast Python linter and code formatter, written in Rust.
+colorlog~=6.10                          # Enhances logging output with colors to improve readability during development.
 
-colorlog==6.10.1                        # Enhances logging output with colors to improve readability during development.
+## Testing Framework
+pytest~=9.1                             # A mature full-featured Python testing framework.
 
-pytest-django==4.11.1                   # Pytest plugin that provides Django integration for simplified and powerful testing workflows.
+## Django Testing Integration
+pytest-django~=4.14                     # Pytest plugin that provides Django integration for simplified and powerful testing workflows.
+
+## Django Development Extensions
+django-extensions~=4.1                  # Enhanced Django toolkit with shell_plus, runserver_plus, and debugging utilities.
+django-debug-toolbar~=6.1               # Interactive debug toolbar for SQL, template, and request inspection (development only).
+
+## Documentation System
+Sphinx~=9.0                             # Main documentation generator for Python projects.
+sphinx-book-theme~=1.1                  # Clean, book-style theme for tutorials and technical docs.
+sphinx-autobuild~=2025.8                # Auto-reload documentation builder for live preview.
+sphinx-autodoc-typehints~=3.6           # Automatically adds type hints from Python code to documentation.

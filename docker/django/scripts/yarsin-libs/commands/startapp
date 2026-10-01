@@ -1,0 +1,493 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Command: startapp
+# Description: Create new Django applications with proper configuration
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Command Metadata
+# -----------------------------------------------------------------------------
+# This metadata is used by yarsin for command discovery and help display.
+# Each field provides information about the command's purpose and usage.
+# -----------------------------------------------------------------------------
+declare -rA CMD_METADATA=(
+    [name]="startapp"
+    [category]="django"
+    [description]="Create new Django applications with proper configuration"
+    [usage]="yarsin startapp <app_name> [app_name2 ...] [OPTIONS]"
+    [version]="1.0.0"
+    [requires]="python django-admin"
+)
+
+
+# =============================================================================
+# EXECUTION GUARD
+# =============================================================================
+# Prevents direct execution of the command script. Ensures the command is only
+# executed through the yarsin dispatcher, which provides the necessary
+# environment and library loading.
+#
+# This guard checks two conditions:
+#   1. Script is not being executed directly (sourced by yarsin)
+#   2. Script is running within yarsin context (__YARSIN__ flag is set)
+#
+# Returns:
+#   Non-zero exit code with error message if executed directly
+# -----------------------------------------------------------------------------
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This command cannot be executed directly." >&2
+    exit 1
+elif [[ "${__YARSIN__}" != true ]]; then
+    echo "Error: This command must be executed through yarsin dispatcher" >&2
+    echo "Please use 'yarsin $(basename "${BASH_SOURCE[0]}") [OPTIONS]' instead." >&2
+    exit 1
+fi
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the startapp command.
+#
+# Description:
+#   Creates one or more Django applications in the appropriate directory
+#   and automatically fixes the AppConfig.name to use the correct Python
+#   import path based on the project's apps directory structure.
+#
+# Arguments:
+#   app_names - One or more application names to create
+#
+# Options:
+#   -n, --name NAME     Application name (can be used multiple times)
+#   -d, --dir DIRECTORY Target directory for apps (default: ./apps/)
+#   -h, --help          Display this help message
+#
+# Environment Variables:
+#   WORK_DIRECTORY      Base project directory
+#   APP_DIRECTORY       Directory name for Django apps (default: 'apps')
+#
+# Returns:
+#   0 - All applications created successfully
+#   1 - Invalid options or missing arguments
+#   2 - Application creation failed
+# -----------------------------------------------------------------------------
+main() {
+    local app_names=()
+    local app_dir=""
+
+    # -------------------------------------------------------------------------
+    # Parse Command Line Arguments
+    # -------------------------------------------------------------------------
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+
+            -n|--name)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--name' requires an argument"
+                    return 1
+                fi
+                app_names+=("$2")
+                shift 2
+                ;;
+
+            -d|--dir)
+                if [[ -z "$2" ]]; then
+                    alenaal_error "Option '--dir' requires an argument"
+                    return 1
+                fi
+                app_dir="$2"
+                shift 2
+                ;;
+
+            --)
+                shift
+                while [[ $# -gt 0 ]]; do
+                    app_names+=("$1")
+                    shift
+                done
+                break
+                ;;
+
+            -*)
+                alenaal_error "Unknown option: '$1'"
+                alenaal_suggestion "Use 'yarsin startapp --help' for usage information"
+                return 1
+                ;;
+
+            *)
+                app_names+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # -------------------------------------------------------------------------
+    # Validate Inputs
+    # -------------------------------------------------------------------------
+    if [[ ${#app_names[@]} -eq 0 ]]; then
+        alenaal_error "No application names provided."
+        alenaal_suggestion "Usage: yarsin startapp <app_name> [app_name2 ...]"
+        alenaal_suggestion "Use 'yarsin startapp --help' for more information"
+        return 1
+    fi
+
+    # Set default app directory if not specified
+    if [[ -z "${app_dir}" ]]; then
+        app_dir="${WORK_DIRECTORY:-$(pwd)}/${APP_DIRECTORY:-apps}"
+        alenaal_newline
+        alenaal_note "Using default apps directory: ${app_dir}" --bold
+        alenaal_newline
+    fi
+
+    # Ensure the apps directory exists
+    if [[ ! -d "${app_dir}" ]]; then
+        alenaal_info "Creating apps directory: ${app_dir}"
+        if ! mkdir -p "${app_dir}"; then
+            alenaal_error "Failed to create apps directory: ${app_dir}"
+            return 2
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Create Applications
+    # -------------------------------------------------------------------------
+    local success_count=0
+    local fail_count=0
+
+    for app_name in "${app_names[@]}"; do
+        alenaal_info "Creating application: ${app_name}"
+        
+        if _create_single_app "${app_name}" "${app_dir}"; then
+            success_count=$((success_count + 1))
+        else
+            fail_count=$((fail_count + 1))
+        fi
+    done
+
+    # -------------------------------------------------------------------------
+    # Display Summary
+    # -------------------------------------------------------------------------
+    alenaal_newline
+    if [[ ${fail_count} -eq 0 ]]; then
+        alenaal_complete "Successfully created ${success_count} application(s)." --bold
+    else
+        alenaal_warning "Created ${success_count} application(s), failed: ${fail_count}"
+        return 2
+    fi
+
+    return 0
+}
+
+
+# =============================================================================
+# HELP FUNCTION
+#
+# Displays comprehensive help for the startapp command.
+#
+# Provides detailed information about creating Django applications with
+# proper configuration and AppConfig setup.
+# -----------------------------------------------------------------------------
+show_help() {
+    alenaal_newline
+    alenaal_format "startapp - Create Django Applications" --header --icon "📱"
+
+    # -------------------------------------------------------------------------
+    # Description Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Description:" --section --description
+    alenaal_format "${CMD_METADATA[description]}" --item
+    alenaal_format "Creates one or more Django applications in the configured apps directory" --item
+    alenaal_format "and automatically fixes the AppConfig.name to use the correct import path." --item --newline
+
+    # -------------------------------------------------------------------------
+    # Usage Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Usage:" --section --usage
+    alenaal_format "${CMD_METADATA[usage]}" --item --icon "⇢"
+    alenaal_format "yarsin startapp blog" --item --icon "⇢"
+    alenaal_format "yarsin startapp users blog api" --item --icon "⇢"
+    alenaal_format "yarsin startapp --name users --name blog --dir ./custom_apps" --item --icon "⇢"
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Options Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Options:" --section --option
+
+    alenaal_format  --item --list --bold -- "-n, --name NAME"
+    alenaal_format "Application name (can be used multiple times)" --indent 4
+    alenaal_format "Alternative to positional arguments" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-d, --dir DIRECTORY"
+    alenaal_format "Target directory for application creation" --indent 4
+    alenaal_format "Overrides APP_DIRECTORY environment variable" --indent 4 --italic
+    alenaal_format "Default: \${WORK_DIRECTORY}/\${APP_DIRECTORY}" --indent 4 --italic
+
+    alenaal_format --item --list --bold -- "-h, --help"
+    alenaal_format "Display this help message" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Arguments Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Arguments:" --section --info
+    alenaal_format "app_name" --item --list --bold
+    alenaal_format "Name of the Django application to create" --indent 4
+    alenaal_format "Multiple app names can be provided" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Environment Variables Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Environment Variables:" --section --info
+    alenaal_format "WORK_DIRECTORY" --item --list --bold
+    alenaal_format "Base directory for the Django project" --indent 4
+    alenaal_format "Default: current directory" --indent 4 --italic
+
+    alenaal_format "APP_DIRECTORY" --item --list --bold
+    alenaal_format "Directory name for Django applications" --indent 4
+    alenaal_format "Default: 'apps'" --indent 4 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # AppConfig Fix Explanation
+    # -------------------------------------------------------------------------
+    alenaal_format "Automatic AppConfig Fix:" --section --tip
+    alenaal_format "After creating each app, this command automatically updates" --item
+    alenaal_format "the apps.py file to set the correct Python import path:" --item --newline
+
+    alenaal_format "Before:" --item --bold --indent 4
+    alenaal_format "name = 'blog'" --indent 5 --italic --newline
+
+    alenaal_format "After:" --item --bold --indent 4
+    alenaal_format "name = 'apps.blog'" --indent 5 --italic
+    alenaal_format "        ^^^^^^^^^ (from APP_DIRECTORY)" --indent 5
+    alenaal_newline
+
+    alenaal_format "This ensures proper Python imports and Django app discovery." --item --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Examples Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Examples:" --section --example
+
+    alenaal_format "Single application" --subsection --italic
+    alenaal_format "yarsin startapp blog" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates 'blog' app in ./apps/blog" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Multiple applications" --subsection --italic
+    alenaal_format "yarsin startapp users blog api" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates three apps in ./apps/ directory" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Using --name flag" --subsection --italic
+    alenaal_format "yarsin startapp --name users --name blog --name api" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Alternative syntax for multiple apps" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Custom directory" --subsection --italic
+    alenaal_format "yarsin startapp --dir ./custom_apps blog" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates app in ./custom_apps/blog" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "With environment variables" --subsection --italic
+    alenaal_format "export WORK_DIRECTORY=~/projects/myblog" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "export APP_DIRECTORY=django_apps" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "yarsin startapp blog" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates app in ~/projects/myblog/django_apps/blog" --indent 5 --italic
+    alenaal_newline
+
+    alenaal_format "Mix of options and arguments" --subsection --italic
+    alenaal_format "yarsin startapp --name users --dir ./src blog api" --item --icon "⇢" --indent 4 --bold
+    alenaal_format "Creates 'blog' and 'api' in ./src/, and 'users' in ./src/" --indent 5 --italic
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Generated Structure Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Generated Structure:" --section --example
+    alenaal_format "Each application follows Django's standard structure:" --item
+    alenaal_newline
+
+    alenaal_format "apps/blog/" --bold --indent 3
+    alenaal_format "├─ __init__.py" --indent 4
+    alenaal_format "├─ admin.py         # Admin interface configuration" --indent 4
+    alenaal_format "├─ apps.py          # AppConfig (automatically fixed)" --indent 4
+    alenaal_format "├─ models.py        # Database models" --indent 4
+    alenaal_format "├─ tests.py         # Unit tests" --indent 4
+    alenaal_format "├─ views.py         # View functions/classes" --indent 4
+    alenaal_format "├─ migrations/" --indent 4
+    alenaal_format "│  └─ __init__.py" --indent 4
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Requirements Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Requirements:" --section --warning
+    alenaal_format "Python 3.13+" --item --list
+    alenaal_format "Django 5.2+" --item --list
+    alenaal_format "django-admin in PATH" --item --list
+    alenaal_format "Write permissions in target directory" --item --list
+    alenaal_newline
+
+    # -------------------------------------------------------------------------
+    # Next Steps Section
+    # -------------------------------------------------------------------------
+    alenaal_format "Next Steps:" --section --tip
+    alenaal_format "After creating your apps, you can:" --item
+
+    alenaal_format "1. Register models in admin.py" --item --list --indent 4
+    alenaal_format "2. Define models in models.py" --item --list --indent 4
+    alenaal_format "3. Create views in views.py" --item --list --indent 4
+    alenaal_format "4. Add URLs to project's URL configuration" --item --list --indent 4
+    alenaal_format "5. Add app to INSTALLED_APPS in settings" --item --list --indent 4
+    alenaal_format "6. Run migrations: yarsin makemigrations" --item --list --indent 4
+    alenaal_newline
+}
+
+
+# =============================================================================
+# COMMAND FUNCTIONS
+# =============================================================================
+# Private helper functions for creating and configuring applications.
+# These functions are prefixed with underscore to indicate internal use.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Function: _create_single_app
+#
+# Creates a single Django application and fixes its AppConfig.
+#
+# Args:
+#   $1 - app_name: Name of the application to create
+#   $2 - base_dir: Base directory where the app should be created
+#
+# Returns:
+#   0 - Application created and configured successfully
+#   1 - Application creation failed
+#   2 - AppConfig fix failed
+# -----------------------------------------------------------------------------
+_create_single_app() {
+    local app_name="$1"
+    local base_dir="$2"
+    local app_path="${base_dir}/${app_name}"
+
+    # Check if app already exists
+    if [[ -d "${app_path}" ]]; then
+        alenaal_warning "Application '${app_name}' already exists at: ${app_path}"
+        alenaal_suggestion "Use a different name or remove the existing directory"
+        return 1
+    fi
+
+    # Create the app directory
+    if ! mkdir -p "${app_path}"; then
+        alenaal_error "Failed to create directory for app '${app_name}'"
+        return 1
+    fi
+
+    # Run django-admin startapp
+    if ! django-admin startapp "${app_name}" "${app_path}" 2>/dev/null; then
+        alenaal_error "Failed to create app '${app_name}' using django-admin"
+        # Clean up the directory we created
+        rmdir "${app_path}" 2>/dev/null || true
+        return 1
+    fi
+
+    alenaal_success "App '${app_name}' created successfully."
+
+    # Fix AppConfig.name
+    if ! _fix_appconfig_name "${app_name}" "${app_path}"; then
+        alenaal_warning "App '${app_name}' created but AppConfig.name could not be updated."
+        alenaal_suggestion "Manually update apps.py to set name = '${base_dir##*/}.${app_name}'"
+        return 2
+    fi
+
+    alenaal_success "Updated AppConfig.name → '${base_dir##*/}.${app_name}'" --indent 2
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Function: _fix_appconfig_name
+#
+# Updates the AppConfig.name in an app's apps.py file.
+#
+# Args:
+#   $1 - app_name: Name of the application
+#   $2 - app_dir: Path to the application directory
+#
+# Returns:
+#   0 - AppConfig.name updated successfully
+#   1 - apps.py not found or could not be modified
+# -----------------------------------------------------------------------------
+_fix_appconfig_name() {
+    local app_name="$1"
+    local app_dir="$2"
+    local apps_py="${app_dir}/apps.py"
+    local apps_dir_name="$(basename "$(dirname "${app_dir}")")"
+
+    # Ensure apps.py exists
+    if [[ ! -f "${apps_py}" ]]; then
+        alenaal_error "apps.py not found in ${app_dir}. Cannot update AppConfig.name."
+        return 1
+    fi
+
+    # Create backup before modifying
+    local backup_file="${apps_py}.bak"
+    cp "${apps_py}" "${backup_file}"
+
+    # Safely replace the 'name = "<something>"' line
+    # This handles various formatting: name = "blog", name='blog', name = 'blog', etc.
+    if ! sed -i \
+        "s/^[[:space:]]*name[[:space:]]*=[[:space:]]*['\"][^'\"]*['\"]/    name = \"${apps_dir_name}.${app_name}\"/" \
+        "${apps_py}"; then
+        
+        # Restore from backup if sed failed
+        mv "${backup_file}" "${apps_py}"
+        alenaal_error "Failed to update AppConfig.name in ${apps_py}"
+        return 1
+    fi
+
+    # Remove backup file on success
+    rm -f "${backup_file}"
+    return 0
+}
+
+
+# =============================================================================
+# METADATA HANDLER LOADING
+# =============================================================================
+# When sourced by yarsin, load metadata handling functions.
+# This provides yarsin with access to metadata functions without
+# executing the main command logic. The handler provides:
+#   - metadata() - Returns all command metadata as key-value pairs
+#   - metadata_value() - Returns specific metadata field value
+#
+# The "$@" passes any arguments through to the handler, though typically
+# none are needed for metadata operations.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/includes/metadata" "$@"
