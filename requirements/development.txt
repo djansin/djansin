@@ -9,16 +9,21 @@ colorlog~=6.10                          # Enhances logging output with colors to
 
 ## Testing Framework
 pytest~=9.1                             # A mature full-featured Python testing framework.
+pytest-mock~=3.16                       # Pytest plugin providing the mocker fixture for simplified mocking.
 
 ## Django Testing Integration
 pytest-django~=4.14                     # Pytest plugin that provides Django integration for simplified and powerful testing workflows.
 
-## Django Development Extensions
+## Django Development Extensions and Profiling
 django-extensions~=4.1                  # Enhanced Django toolkit with shell_plus, runserver_plus, and debugging utilities.
-django-debug-toolbar~=6.1               # Interactive debug toolbar for SQL, template, and request inspection (development only).
+django-debug-toolbar~=6.1               # Interactive debug toolbar for real-time SQL queries, templates, and request inspection.
+django-silk~=5.3                        # Profiling and inspection tool for Django REST Framework and HTTP requests execution time.
 
 ## Documentation System
 Sphinx~=9.0                             # Main documentation generator for Python projects.
 sphinx-book-theme~=1.1                  # Clean, book-style theme for tutorials and technical docs.
 sphinx-autobuild~=2025.8                # Auto-reload documentation builder for live preview.
 sphinx-autodoc-typehints~=3.6           # Automatically adds type hints from Python code to documentation.
+
+Markdown>=3.11,<3.12                    # Pure-Python implementation of the Markdown markup language for rendering text to HTML.
+drf-spectacular>=0.30,<0.31             # OpenAPI 3 schema generator for Django REST Framework with automatic documentation.
