@@ -13,7 +13,8 @@ explicit hard_delete() method for cases where deletion is intentionally required
 from django.db import models
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.business import OperationNotAllowedError
+from core.exceptions import BusinessError
+from core.exceptions.errors.business import OperationNotAllowed
 from core.models.base import BaseModel
 from core.models.managers.undeletable import UndeletableManager
 
@@ -102,7 +103,9 @@ class UndeletableModel(BaseModel):
             OperationNotAllowedError: Always raised when this method is called,
                 with a message indicating that this record cannot be deleted.
         """
-        raise OperationNotAllowedError(reason_=_t("This record cannot be deleted."))
+        raise BusinessError(
+            OperationNotAllowed(reason_=_t("This record cannot be deleted."))
+        )
 
     def hard_delete(self, *args, **kwds):
         """Permanently delete this model instance.

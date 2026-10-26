@@ -19,7 +19,7 @@ from typing import overload
 
 from django.utils.translation import gettext_noop as _n
 
-from core.exceptions.errors.common import SysErrorDefinition
+from core.exceptions.errors.categories import SysErrorDefinition
 
 
 class UnknownError(SysErrorDefinition):
@@ -30,7 +30,7 @@ class UnknownError(SysErrorDefinition):
     a catch-all for unhandled exceptions.
 
     Attributes:
-        code: SYS_UNKNOWN_ERROR
+        code: "SYS:UNKNOWN_ERROR"
         http_status: 500 Internal Server Error
         message_template: "Unexpected error. Reference: {reference_id}"
         is_retryable: False (requires investigation)
@@ -40,7 +40,7 @@ class UnknownError(SysErrorDefinition):
         ... raise SystemError(UnknownError(reference_id="ERR-12345"))
     """
 
-    code = "SYS_UNKNOWN_ERROR"
+    code = "SYS:UNKNOWN_ERROR"
     http_status = 500
     message_template = _n("Unexpected error. Reference: {reference_id}")
     is_retryable = False
@@ -71,7 +71,7 @@ class InternalError(SysErrorDefinition):
     indicates a bug or misconfiguration in the application.
 
     Attributes:
-        code: SYS_INTERNAL_ERROR
+        code: "SYS:INTERNAL_ERROR"
         http_status: 500 Internal Server Error
         message_template: "Internal server error. Reference: {reference_id}"
         is_retryable: False (requires investigation)
@@ -81,7 +81,7 @@ class InternalError(SysErrorDefinition):
         ... raise SystemError(InternalError(reference_id="INT-12345"))
     """
 
-    code = "SYS_INTERNAL_ERROR"
+    code = "SYS:INTERNAL_ERROR"
     http_status = 500
     message_template = _n("Internal server error. Reference: {reference_id}")
     is_retryable = False
@@ -112,7 +112,7 @@ class ServiceUnavailable(SysErrorDefinition):
     The operation can be retried later.
 
     Attributes:
-        code: SYS_SERVICE_UNAVAILABLE
+        code: "SYS:SERVICE_UNAVAILABLE"
         http_status: 503 Service Unavailable
         message_template: "Service temporarily unavailable. Please try again later."
         is_retryable: True (retrying may succeed)
@@ -122,7 +122,7 @@ class ServiceUnavailable(SysErrorDefinition):
         ... raise SystemError(ServiceUnavailable())
     """
 
-    code = "SYS_SERVICE_UNAVAILABLE"
+    code = "SYS:SERVICE_UNAVAILABLE"
     http_status = 503
     message_template = _n("Service temporarily unavailable. Please try again later.")
     is_retryable = True
@@ -136,7 +136,7 @@ class Timeout(SysErrorDefinition):
     smaller request or later.
 
     Attributes:
-        code: SYS_TIMEOUT
+        code: "SYS:TIMEOUT"
         http_status: 504 Gateway Timeout
         message_template: "Request timeout. Please try again with smaller request or later."
         is_retryable: True (retrying may succeed)
@@ -146,7 +146,7 @@ class Timeout(SysErrorDefinition):
         ... raise SystemError(Timeout())
     """
 
-    code = "SYS_TIMEOUT"
+    code = "SYS:TIMEOUT"
     http_status = 504
     message_template = _n(
         "Request timeout. Please try again with smaller request or later."
@@ -161,7 +161,7 @@ class UserCreationFailed(SysErrorDefinition):
     due to internal errors, data inconsistencies, or system constraints.
 
     Attributes:
-        code: SYS_USER_CREATION_FAILED
+        code: "SYS:USER_CREATION_FAILED"
         http_status: 500 Internal Server Error
         message_template: "Failed to create user: {error_detail}"
         is_retryable: True (retrying may succeed after fixing issue)
@@ -173,7 +173,7 @@ class UserCreationFailed(SysErrorDefinition):
         ... ))
     """
 
-    code = "SYS_USER_CREATION_FAILED"
+    code = "SYS:USER_CREATION_FAILED"
     http_status = 500
     message_template = _n("Failed to create user: {error_detail}")
     is_retryable = True

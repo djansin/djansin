@@ -21,7 +21,7 @@ from typing import overload
 
 from django.utils.translation import gettext_noop as _n
 
-from core.exceptions.errors.common import HttpErrorDefinition
+from core.exceptions.errors.categories import HttpErrorDefinition
 
 
 class NotFound(HttpErrorDefinition):

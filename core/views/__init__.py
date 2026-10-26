@@ -1,10 +1,10 @@
-from .api_view import APIView
-from .read_only_model_viewset import ROModelViewSet
+from .api import APIView
 from .responses import Response
+from .viewset import ReadOnlyModelViewSet
 
 
 __all__ = [
-    "ROModelViewSet",
     "APIView",
     "Response",
+    "ReadOnlyModelViewSet",
 ]

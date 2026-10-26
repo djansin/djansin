@@ -20,7 +20,7 @@ from typing import Any, overload
 
 from django.utils.translation import gettext_noop as _n
 
-from core.exceptions.errors.common import AppErrorDefinition
+from core.exceptions.errors.categories import AppErrorDefinition
 
 
 class ModelFieldNotFound(AppErrorDefinition):
@@ -323,7 +323,7 @@ class InvalidUsername(AppErrorDefinition):
         super().__init__(message_template, **kwds)
 
     @property
-    def get_details(self) -> dict[str, dict[str, list[str]] | list[str]]:
+    def get_detail(self) -> dict[str, dict[str, list[str]] | list[str]]:
         """Returns structured validation error details.
 
         Returns:

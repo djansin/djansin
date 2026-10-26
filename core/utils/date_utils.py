@@ -17,7 +17,8 @@ Django's current timezone for Gregorian functions.
 import jdatetime
 from django.utils import timezone
 
-from core.exceptions.app import InvalidHalfYearError, InvalidSeasonError
+from core.exceptions import AppError
+from core.exceptions.errors.app import InvalidHalfYear, InvalidSeason
 
 
 # ========== Jalali Calendar Functions ==========
@@ -133,7 +134,7 @@ def jalali_half_year_range(
         tuple[datetime, datetime]: (start_datetime, end_datetime) for the half-year.
 
     Raises:
-        InvalidHalfYearError: If half is not 1 or 2.
+        AppError: If half is not 1 or 2.
 
     Examples:
         >>> start, end = jalali_half_year_range(1, 1405)
@@ -153,7 +154,7 @@ def jalali_half_year_range(
         # End: Last day of Esfand (month 12)
         end_date = jalali_month_end(12, year)
     else:
-        raise InvalidHalfYearError(half=half)
+        raise AppError(InvalidHalfYear(half=half))
 
     return (start_date, end_date)
 
@@ -175,7 +176,7 @@ def jalali_season_start(season: int, year: int | None = None) -> timezone.dateti
         datetime: Gregorian datetime of the first day of the season.
 
     Raises:
-        InvalidSeasonError: If season is not between 1 and 4.
+        AppError: If season is not between 1 and 4.
 
     Examples:
         >>> jalali_season_start(2, 1405)  # Start of Summer 1405
@@ -193,7 +194,7 @@ def jalali_season_start(season: int, year: int | None = None) -> timezone.dateti
     }
 
     if season not in season_months:
-        raise InvalidSeasonError(season=season)
+        raise AppError(InvalidSeason(season=season))
 
     month = season_months[season]
     return jalali_month_start(month, year)
@@ -262,7 +263,7 @@ def gregorian_half_year_range(
             with timezone awareness.
 
     Raises:
-        InvalidHalfYearError: If half is not 1 or 2.
+        AppError: If half is not 1 or 2.
 
     Examples:
         >>> start, end = gregorian_half_year_range(1, 2024)
@@ -280,7 +281,7 @@ def gregorian_half_year_range(
         start = timezone.datetime(year, 7, 1, 0, 0, 0, tzinfo=tz)
         end = timezone.datetime(year, 12, 31, 23, 59, 59, 999999, tzinfo=tz)
     else:
-        raise InvalidHalfYearError(half=half)
+        raise AppError(InvalidHalfYear(half=half))
 
     return (start, end)
 
@@ -362,7 +363,7 @@ def gregorian_half_year_from_string(semester: str) -> tuple[int, int]:
         tuple[int, int]: (year, half)
 
     Raises:
-        InvalidHalfYearError: If the string format is invalid or half is not 1 or 2.
+        AppError: If the string format is invalid or half is not 1 or 2.
 
     Examples:
         >>> gregorian_half_year_from_string("2024-1")
@@ -377,8 +378,42 @@ def gregorian_half_year_from_string(semester: str) -> tuple[int, int]:
         half = int(half_str)
 
         if half not in (1, 2):
-            raise InvalidHalfYearError(half=half)
+            raise AppError(InvalidHalfYear(half=half))
 
         return (year, half)
     except (ValueError, IndexError) as e:
-        raise InvalidHalfYearError(half=semester) from e
+        raise AppError(InvalidHalfYear(half=semester)) from e
+
+
+def compute_age(
+    birth_date: timezone.datetime, today: timezone.datetime | None = None
+) -> int:
+    """Computes age in years from a birth date.
+
+    Calculates the number of complete years between ``birth_date`` and ``today``.
+    If ``today`` is not provided, the current date and time is used. The result
+    accounts for whether the birthday has already occurred in the current year.
+
+    Args:
+        birth_date: The date of birth as a timezone-aware datetime.
+        today: The reference date for the calculation. If None, the current
+            date and time is used.
+
+    Returns:
+        int: The age in complete years.
+
+    Examples:
+        >>> birth = timezone.datetime(1990, 5, 10, tzinfo=timezone.utc)
+        >>> today = timezone.datetime(2024, 5, 9, tzinfo=timezone.utc)
+        >>> compute_age(birth, today)
+        33
+
+        >>> today = timezone.datetime(2024, 5, 10, tzinfo=timezone.utc)
+        >>> compute_age(birth, today)
+        34
+    """
+    today = today or timezone.datetime.today()
+    years = today.year - birth_date.year
+    if (today.month, today.day) < (birth_date.month, birth_date.day):
+        years -= 1
+    return years

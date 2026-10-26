@@ -19,7 +19,8 @@ from django.contrib.auth.models import (
 )
 from django.utils import timezone
 
-from core.exceptions.app import InvalidFormatError, RequiredFieldError
+from core.exceptions import AppError
+from core.exceptions.errors.app import InvalidFormat, RequiredField
 from core.models.managers.base import BaseManager
 from core.models.managers.querysets.user import BaseUserQuerySet
 
@@ -162,17 +163,17 @@ class BaseUserManager(
             The newly created user instance.
 
         Raises:
-            RequiredFieldError: If username is empty or required fields are missing.
+            AppError: If username is empty or required fields are missing.
         """
         if not username:
-            raise RequiredFieldError(field="username")
+            raise AppError(RequiredField(field="username"))
 
         required_fields = getattr(self.model, "REQUIRED_FIELDS", [])
         missing_fields = [
             field for field in required_fields if field not in extra_fields
         ]
         if missing_fields:
-            raise RequiredFieldError(field=f"{', '.join(missing_fields)}")
+            raise AppError(RequiredField(field=f"{', '.join(missing_fields)}"))
 
         user = self.model(username=username, **extra_fields)
 
@@ -199,16 +200,16 @@ class BaseUserManager(
             The newly created superuser instance.
 
         Raises:
-            InvalidFormatError: If is_staff or is_superuser is not set to True.
+            AppError: If is_staff or is_superuser is not set to True.
         """
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
 
         if not extra_fields.get("is_staff"):
-            raise InvalidFormatError(expected_format="is_staff=True")
+            raise AppError(InvalidFormat(expected_format="is_staff=True"))
         if not extra_fields.get("is_superuser"):
-            raise InvalidFormatError(expected_format="is_superuser=True")
+            raise AppError(InvalidFormat(expected_format="is_superuser=True"))
 
         return self.create_user(username, password, **extra_fields)
 

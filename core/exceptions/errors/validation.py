@@ -20,7 +20,7 @@ from typing import Any, overload
 
 from django.utils.translation import gettext_lazy as _t, gettext_noop as _n
 
-from core.exceptions.errors.common import ValidErrorDefinition
+from core.exceptions.errors.categories import ValidErrorDefinition
 
 
 class RequiredField(ValidErrorDefinition):
@@ -40,7 +40,7 @@ class RequiredField(ValidErrorDefinition):
         ... raise ValidationError(RequiredField(field="email"))
     """
 
-    code = "VALID_REQUIRED_FIELD"
+    code = "VALID:REQUIRED_FIELD"
     http_status = 422
     message_template = _n("Field '{field}' is required.")
     is_retryable = False
@@ -80,7 +80,7 @@ class InvalidEmail(ValidErrorDefinition):
         ... raise ValidationError(InvalidEmail(email="invalid@"))
     """
 
-    code = "VALID_INVALID_EMAIL"
+    code = "VALID:INVALID_EMAIL"
     http_status = 422
     message_template = _n("Email '{email}' is not valid.")
     is_retryable = False
@@ -120,7 +120,7 @@ class InvalidPhone(ValidErrorDefinition):
         ... raise ValidationError(InvalidPhone(number="123456"))
     """
 
-    code = "VALID_INVALID_PHONE"
+    code = "VALID:INVALID_PHONE"
     http_status = 422
     message_template = _n("Phone number '{number}' is not valid.")
     is_retryable = False
@@ -160,7 +160,7 @@ class FieldTooLong(ValidErrorDefinition):
         ... raise ValidationError(FieldTooLong(field="title", max_length=100))
     """
 
-    code = "VALID_FIELD_TOO_LONG"
+    code = "VALID:FIELD_TOO_LONG"
     http_status = 422
     message_template = _n("Field '{field}' must not exceed {max_length} characters.")
     is_retryable = False
@@ -201,7 +201,7 @@ class FieldTooShort(ValidErrorDefinition):
         ... raise ValidationError(FieldTooShort(field="password", min_length=8))
     """
 
-    code = "VALID_FIELD_TOO_SHORT"
+    code = "VALID:FIELD_TOO_SHORT"
     http_status = 422
     message_template = _n("Field '{field}' must be at least {min_length} characters.")
     is_retryable = False
@@ -242,7 +242,7 @@ class InvalidFormat(ValidErrorDefinition):
         ... raise ValidationError(InvalidFormat(expected_format="YYYY-MM-DD"))
     """
 
-    code = "VALID_INVALID_FORMAT"
+    code = "VALID:INVALID_FORMAT"
     http_status = 422
     message_template = _n("Invalid format. Expected {expected_format}.")
     is_retryable = False
@@ -282,7 +282,7 @@ class InvalidRange(ValidErrorDefinition):
         ... raise ValidationError(InvalidRange(min_value=1, max_value=100))
     """
 
-    code = "VALID_INVALID_RANGE"
+    code = "VALID:INVALID_RANGE"
     http_status = 422
     message_template = _n("Value must be between {min_value} and {max_value}.")
     is_retryable = False
@@ -323,7 +323,7 @@ class PatternMismatch(ValidErrorDefinition):
         ... raise ValidationError(PatternMismatch(pattern="^[A-Z]+$"))
     """
 
-    code = "VALID_PATTERN_MISMATCH"
+    code = "VALID:PATTERN_MISMATCH"
     http_status = 422
     message_template = _n("Value does not match required pattern: {pattern}.")
     is_retryable = False
@@ -365,7 +365,7 @@ class InvalidUsername(ValidErrorDefinition):
         ... ))
     """
 
-    code = "VALID_INVALID_USERNAME"
+    code = "VALID:INVALID_USERNAME"
     http_status = 422
     message_template = _n("Validation failed. Please check the provided data.")
     is_retryable = False
@@ -391,7 +391,7 @@ class InvalidUsername(ValidErrorDefinition):
         super().__init__(message_template, **kwds)
 
     @property
-    def get_details(self) -> dict[str, dict[str, list[str]] | list[str]]:
+    def get_detail(self) -> dict[str, dict[str, list[str]] | list[str]]:
         """Returns structured validation error details.
 
         Returns:
@@ -421,7 +421,7 @@ class PasswordConfirmationMismatch(ValidErrorDefinition):
         ... raise ValidationError(PasswordConfirmationMismatch())
     """
 
-    code = "VALID_PASSWORD_CONFIRMATION_MISMATCH"
+    code = "VALID:PASSWORD_CONFIRMATION_MISMATCH"
     http_status = 422
     message_template = _n("Password confirmation does not match.")
     is_retryable = False
@@ -444,7 +444,7 @@ class CredentialsRequired(ValidErrorDefinition):
         ... raise ValidationError(CredentialsRequired())
     """
 
-    code = "VALID_CREDENTIALS_REQUIRED"
+    code = "VALID:CREDENTIALS_REQUIRED"
     http_status = 422
     message_template = _n(
         "Both identifier and password are required for authentication."
@@ -469,7 +469,7 @@ class InvalidSeason(ValidErrorDefinition):
         ... raise ValidationError(InvalidSeason(season=5))
     """
 
-    code = "VALID_INVALID_SEASON"
+    code = "VALID:INVALID_SEASON"
     http_status = 422
     message_template = _n("Invalid season: {season}. Must be between 1 and 4.")
     is_retryable = False
@@ -509,7 +509,7 @@ class InvalidHalfYear(ValidErrorDefinition):
         ... raise ValidationError(InvalidHalfYear(half=3))
     """
 
-    code = "VALID_INVALID_HALF_YEAR"
+    code = "VALID:INVALID_HALF_YEAR"
     http_status = 422
     message_template = _n("Invalid half-year number: {half}. Must be 1 or 2.")
     is_retryable = False
@@ -553,7 +553,7 @@ class Validation(ValidErrorDefinition):
         ... ))
     """
 
-    code = "VALID_VALIDATION_ERROR"
+    code = "VALID:VALIDATION_ERROR"
     http_status = 422
     message_template = _n("Validation failed. {detail}")
     is_retryable = False
@@ -617,7 +617,7 @@ class UploadedFileError(ValidErrorDefinition):
         ... ))
     """
 
-    code = "VALID_UPLOAD_ERROR"
+    code = "VALID:UPLOAD_ERROR"
     http_status = 400
     message_template = _n("File upload error: {detail}")
     is_retryable = False
@@ -660,7 +660,7 @@ class InvalidTrustLevel(ValidErrorDefinition):
         ... ))
     """
 
-    code = "VALID_INVALID_TRUST_LEVEL"
+    code = "VALID:INVALID_TRUST_LEVEL"
     http_status = 422
     message_template = _n(
         "Invalid trust level: {new_level}. Must be one of {allowed_levels}."

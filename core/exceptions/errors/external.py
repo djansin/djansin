@@ -19,7 +19,7 @@ from typing import overload
 
 from django.utils.translation import gettext_noop as _n
 
-from core.exceptions.errors.common import ExtErrorDefinition
+from core.exceptions.errors.categories import ExtErrorDefinition
 
 
 class ExtApi(ExtErrorDefinition):

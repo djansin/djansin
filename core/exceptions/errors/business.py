@@ -21,7 +21,7 @@ from typing import overload
 
 from django.utils.translation import gettext_noop as _n
 
-from core.exceptions.errors.common import BizErrorDefinition
+from core.exceptions.errors.categories import BizErrorDefinition
 
 
 class InsufficientFunds(BizErrorDefinition):

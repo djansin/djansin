@@ -5,7 +5,7 @@ for Django REST Framework ModelSerializers, serving as a foundation for
 reusable model serializer behaviors.
 """
 
-from .base import BaseSerializerMixin
+from core.serializers.mixins.base import BaseSerializerMixin
 
 
 class ModelSerializerMixin(BaseSerializerMixin):

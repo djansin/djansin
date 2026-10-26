@@ -12,7 +12,8 @@ special authorization.
 
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.business import OperationNotAllowedError
+from core.exceptions import BusinessError
+from core.exceptions.errors.business import OperationNotAllowed
 from core.models.managers.querysets.base import BaseQuerySet
 
 
@@ -61,8 +62,12 @@ class UndeletableQuerySet(BaseQuerySet):
             OperationNotAllowedError: Always raised when this method is called,
                 with a message indicating that deletion is prohibited.
         """
-        raise OperationNotAllowedError(
-            reason=_t("Deleting records from this collection is strictly prohibited.")
+        raise BusinessError(
+            OperationNotAllowed(
+                reason=_t(
+                    "Deleting records from this collection is strictly prohibited."
+                )
+            )
         )
 
     def hard_delete(self) -> tuple[int, dict[str, int]]:

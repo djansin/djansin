@@ -203,9 +203,10 @@ def collect_username_errors(
             username passes all validation rules.
     """
     errors = []
+    normalized_username = username.strip()
 
     # Length validation
-    if len(username) < min_length:
+    if len(normalized_username) < min_length:
         errors.append(
             _t("Username must be at least %(min_length)d characters long.")
             % {
@@ -213,7 +214,7 @@ def collect_username_errors(
             }
         )
 
-    if len(username) > max_length:
+    if len(normalized_username) > max_length:
         errors.append(
             _t("Username must be at most %(max_length)d characters long.")
             % {
@@ -222,19 +223,23 @@ def collect_username_errors(
         )
 
     # Skip further character validation if username is empty
-    if not username:
+    if not normalized_username:
         return errors
 
-    if not username[0].isalpha():
+    if not normalized_username[0].isalpha():
         errors.append(_t("Username must start with an alphabet character (a-z)."))
 
     # Character validation
-    if not re.match(r"^[a-z0-9_.-]+$", username):
+    if not re.match(r"^[a-z0-9_.-]+$", normalized_username):
         errors.append(
             _t("Username can only contain lowercase letters (a-z), numbers, and . _ -")
         )
 
-    if ".." in username or "--" in username or "__" in username:
+    if (
+        ".." in normalized_username
+        or "--" in normalized_username
+        or "__" in normalized_username
+    ):
         errors.append(
             _t(
                 "Username cannot contain consecutive dots (..), hyphens (--), underscores (__)"
@@ -242,10 +247,12 @@ def collect_username_errors(
         )
 
     # Start/end with dot validation
-    if username.startswith(".") or username.endswith("."):
+    if normalized_username.startswith(".") or normalized_username.endswith("."):
         errors.append(_t("Username cannot start or end with a dot"))
 
-    if username and (username.startswith("-") or username.endswith("-")):
+    if normalized_username and (
+        normalized_username.startswith("-") or normalized_username.endswith("-")
+    ):
         errors.append(_t("Username cannot start or end with a hyphen (-)."))
 
     return errors

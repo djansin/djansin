@@ -15,7 +15,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.common import BusinessError
+from core.exceptions.categories import BusinessError
 from core.exceptions.errors.business import (
     ResourceAlreadyBlocked,
     ResourceAlreadyUnblocked,

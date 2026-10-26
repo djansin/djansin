@@ -2,9 +2,14 @@
 #            Docker Container Management             #
 ######################################################
 
-## Build and start all containers with forced recreation
+## Build all Docker images
 ## Usage: make build
 build:
+	docker compose -f ./compose.yml build
+
+## Rebuild and start all containers with forced recreation
+## Usage: make rebuild
+rebuild:
 	docker compose -f ./compose.yml up --build -d --remove-orphans --force-recreate
 
 ## Start all containers in detached mode
@@ -32,7 +37,7 @@ logs:
 configs:
 	docker compose -f ./compose.yml config
 
-.PHONY: build up down down-v logs configs
+.PHONY: build rebuild up down down-v logs configs
 
 ######################################################
 #              Database Operations                   #
@@ -210,7 +215,8 @@ help:
 	@echo "Available commands:"
 	@echo ""
 	@echo "DOCKER MANAGEMENT:"
-	@echo "  make build             - Build and start all containers (force recreation)"
+	@echo "  make build             - Build all Docker images"
+	@echo "  make rebuild           - Rebuild and start all containers (force recreation)"
 	@echo "  make up                - Start all containers in detached mode"
 	@echo "  make down              - Stop and remove containers"
 	@echo "  make down-v            - Stop, remove containers and volumes"

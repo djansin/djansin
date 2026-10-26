@@ -19,7 +19,7 @@ from typing import overload
 
 from django.utils.translation import gettext_noop as _n
 
-from core.exceptions.errors.common import DbErrorDefinition
+from core.exceptions.errors.categories import DbErrorDefinition
 
 
 class DbConnection(DbErrorDefinition):
@@ -176,7 +176,7 @@ class DbConflict(DbErrorDefinition):
         super().__init__(message_template, **kwds)
 
 
-class DatabaseError(DbErrorDefinition):
+class Database(DbErrorDefinition):
     """Error definition for general database errors.
 
     This error occurs when a general database operation fails without
@@ -190,7 +190,7 @@ class DatabaseError(DbErrorDefinition):
 
     Example:
         >>> # Wrap this definition in a database-specific exception
-        ... raise DatabaseError(DatabaseError(reference_id="DB-12345"))
+        ... raise DatabaseError(Database(reference_id="DB-12345"))
     """
 
     code = "DB:DATABASE_ERROR"

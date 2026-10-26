@@ -1,11 +1,13 @@
 from .base import BaseAppException, ExceptionSeverity
-from .common import (
+from .categories import (
     AppError,
     AuthError,
     BusinessError,
     DatabaseError,
+    DomainError,
     ExternalError,
     HttpError,
+    InputError,
     SystemError,
     ValidationError,
 )
@@ -16,8 +18,10 @@ __all__ = [
     "AuthError",
     "BusinessError",
     "DatabaseError",
+    "DomainError",
     "ExternalError",
     "HttpError",
+    "InputError",
     "SystemError",
     "ValidationError",
     "BaseAppException",

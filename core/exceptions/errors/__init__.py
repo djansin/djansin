@@ -1,4 +1,4 @@
-from .common import (
+from .categories import (
     AppErrorDefinition,
     AuthErrorDefinition,
     BizErrorDefinition,

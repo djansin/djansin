@@ -12,7 +12,7 @@ elevation, lowering, and checking permissions based on trust thresholds.
 from django.db import models
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.common import AppError, BusinessError
+from core.exceptions.categories import AppError, BusinessError
 from core.exceptions.errors.app import InvalidTrustLevel
 from core.exceptions.errors.business import (
     TrustLevelElevation,

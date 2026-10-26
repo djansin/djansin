@@ -1,43 +1,60 @@
-"""Provides the base error definition class for standardized error representation.
+"""Base error-definition primitives for standardized error representation.
 
-This module defines the foundational ErrorDefinition class and its metaclass
-ErrorMeta, which together establish a robust framework for declaring and
-managing error definitions across the application. Error definitions serve
-as blueprints that specify how errors should be represented, including their
-error codes, HTTP status codes, message templates, and retryability.
+This module defines :class:`ErrorDefinition` and its metaclass
+:class:`ErrorMeta`, which together establish the framework for declaring
+error blueprints across the application. An error definition is a
+reusable, immutable-by-convention blueprint that specifies *how* an error
+is represented: its error code, HTTP status, message template, and
+retryability. Definitions are instantiated with context values to produce
+dynamic, translated messages.
 
-IMPORTANT - What this class represents:
-    - This is the BASE ERROR DEFINITION (blueprint) for ALL error types
-    - Each subclass declares HOW an error should be represented
-    - Defines the error code, HTTP status, message template, and retryability
-    - Can be instantiated with custom context values for dynamic messages
+Important:
+    This module is the foundation for *what an error looks like*
+    (the blueprint). It does not raise anything. Runtime raising is
+    handled by the exception layer, which wraps a definition.
 
-Key distinction:
-    - ErrorDefinition class = "WHAT the error looks like" (blueprint/definition)
-    - Exception classes = "WHEN the error happens" (raised in code flow)
+    - Error definition class: "what the error looks like" (blueprint).
+    - Exception class: "when the error happens" (raised in code flow).
+
+Typical usage:
+    Declare a subclass with the four required class attributes and
+    instantiate it with context values::
+
+        class InsufficientFunds(ErrorDefinition):
+            code = "BIZ:INSUFFICIENT_FUNDS"
+            http_status = 422
+            message_template = (
+                "Insufficient funds. Required: {required}, Available: {available}."
+            )
+            is_retryable = False
+
+        error = InsufficientFunds(required=100.0, available=50.0)
+        error.message  # formatted in the active language
 """
 
 from abc import ABCMeta
-from typing import Any, ClassVar, overload
+from typing import Any, ClassVar
 
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _t, override
 
 
 class ErrorMeta(ABCMeta):
-    """Metaclass for ErrorDefinition that enforces required class attributes.
+    """Metaclass that validates and identifies ``ErrorDefinition`` subclasses.
 
-    This metaclass validates that all ErrorDefinition subclasses define the
-    required class attributes: code, http_status, message_template, and
-    is_retryable. It also validates the types of these attributes and ensures
-    http_status falls within the valid HTTP status code range (100-599).
+    ``ErrorMeta`` enforces that every subclass of :class:`ErrorDefinition`
+    declares the four required class attributes — ``code``, ``http_status``,
+    ``message_template``, and ``is_retryable`` — with the exact expected
+    types, and that ``http_status`` falls within the valid HTTP range
+    (100–599). Validation is intentionally skipped for the
+    ``ErrorDefinition`` base class itself, so the base may remain abstract.
+
+    The metaclass also gives classes value-like semantics: they compare
+    against string codes, hash by their code, and stringify to their code.
 
     Attributes:
-        _required_attrs: Mapping of required attribute names to their expected types.
-
-    Raises:
-        TypeError: When required attributes are missing or have incorrect types.
-        ValueError: When http_status is outside the valid range (100-599).
+        _required_attrs (dict[str, type]): Mapping of required attribute
+            names to their expected Python types.
     """
 
     _required_attrs = {
@@ -48,23 +65,26 @@ class ErrorMeta(ABCMeta):
     }
 
     def __new__(mcs, name, bases, namespace, **kwds):
-        """Creates a new ErrorDefinition subclass with validation.
+        """Create and validate a new ``ErrorDefinition`` subclass.
 
-        Validates that all required class attributes exist and have the correct
-        types. Skips validation for the ErrorDefinition base class itself.
+        Validates that all required class attributes exist with the correct
+        types and that ``http_status`` is within the valid HTTP range.
+        Validation is skipped for the ``ErrorDefinition`` base class.
 
         Args:
-            name: The name of the class being created.
-            bases: The base classes of the class being created.
-            namespace: The namespace dictionary of the class being created.
-            **kwds: Additional keyword arguments.
+            name (str): Name of the class being created.
+            bases (tuple[type, ...]): Base classes of the class being created.
+            namespace (dict[str, Any]): Namespace of the class being created.
+            **kwds (Any): Additional keyword arguments passed to
+                ``ABCMeta.__new__``.
 
         Returns:
-            The created class instance.
+            type: The newly created and validated class.
 
         Raises:
-            TypeError: If required attributes are missing or have incorrect types.
-            ValueError: If http_status is outside the valid range.
+            TypeError: If a required attribute is missing or has the wrong
+                type.
+            ValueError: If ``http_status`` is outside the range 100–599.
         """
         cls = super().__new__(mcs, name, bases, namespace, **kwds)
 
@@ -100,13 +120,16 @@ class ErrorMeta(ABCMeta):
         return cls
 
     def __eq__(cls, other: Any) -> bool:
-        """Compares the error class with a string code or another error class.
+        """Compare the error class with a string code or another error class.
 
         Args:
-            other: The object to compare with (string code or ErrorDefinition subclass).
+            other (Any): The value to compare against. Either a string
+                representing an error code or another ``ErrorDefinition``
+                subclass.
 
         Returns:
-            True if the error codes match, False otherwise.
+            bool | NotImplemented: ``True`` if the codes match, ``False``
+            otherwise, or ``NotImplemented`` for unsupported operand types.
         """
         if isinstance(other, str):
             return cls.code == other
@@ -115,26 +138,27 @@ class ErrorMeta(ABCMeta):
         return NotImplemented
 
     def __str__(cls) -> str:
-        """Returns the error code as the string representation.
+        """Return the error code as the string representation.
 
         Returns:
-            The error code string.
+            str: The error code.
         """
         return cls.code
 
     def __repr__(cls) -> str:
-        """Returns a detailed representation of the error class.
+        """Return a detailed, debug-friendly representation of the class.
 
         Returns:
-            A string containing the class name, code, http_status, and is_retryable.
+            str: A string of the form
+            ``<ClassName: code='...', http_status=..., is_retryable=...>``.
         """
         return f"<{cls.__name__}: code='{cls.code}', http_status={cls.http_status}, is_retryable={cls.is_retryable}>"
 
     def __hash__(cls) -> int:
-        """Returns a hash based on the error code.
+        """Return a hash derived from the error code.
 
         Returns:
-            The hash of the error code string.
+            int: Hash of the class's error code.
         """
         return hash(cls.code)
 
@@ -142,36 +166,45 @@ class ErrorMeta(ABCMeta):
 class ErrorDefinition(metaclass=ErrorMeta):
     """Base class for all error definitions in the application.
 
-    ErrorDefinition serves as the foundation for declaring error blueprints
-    that specify how different types of errors should be represented. It
-    provides functionality for message formatting, context management,
-    instance derivation, and dictionary serialization.
+    ``ErrorDefinition`` is the blueprint for every error in the system.
+    Each subclass declares *how* a particular error is represented by
+    overriding four required class attributes. Instances carry the
+    resolved blueprint values plus optional context values used to format
+    the message, and optional structured details.
 
-    Class Attributes:
-        code: The unique error code identifier (e.g., "BIZ_INSUFFICIENT_FUNDS").
-        http_status: The HTTP status code associated with the error.
-        message_template: The message template with placeholders for context.
-        is_retryable: Whether the operation can be retried.
+    This class provides message formatting (translated and English),
+    context management, selective instance derivation via :meth:`derive`,
+    and dictionary serialization via :meth:`to_dict`.
+
+    Subclasses must declare the following class attributes:
+        code (str): Unique error code identifier
+            (e.g. ``"BIZ_INSUFFICIENT_FUNDS"``).
+        http_status (int): HTTP status code associated with the error,
+            in the range 100–599.
+        message_template (str): Message template containing ``{placeholder}``
+            fields filled from instance context values.
+        is_retryable (bool): Whether the failed operation may be retried.
 
     Attributes:
-        message_template: Instance-specific message template.
-        code: Instance-specific error code.
-        http_status: Instance-specific HTTP status code.
-        is_retryable: Instance-specific retryability flag.
-        _context: Dictionary of context variables for message formatting.
-        _details: Optional dictionary for structured error details.
+        _message_template (str): Instance-level message template.
+        _code (str): Instance-level error code.
+        _http_status (int): Instance-level HTTP status code.
+        _is_retryable (bool): Instance-level retryability flag.
+        _detail (dict[str, Any] | None): Structured error details, if any.
+        _params (dict[str, Any]): Context values used to format the message.
 
     Example:
-        >>> # Define a custom error definition
-        ... class InsufficientFunds(ErrorDefinition):
-        ...    code = "BIZ_INSUFFICIENT_FUNDS"
-        ...    http_status = 422
-        ...    message_template = "Insufficient funds. Required: {required}, Available: {available}."
-        ...    is_retryable = False
-
-        >>> # Instantiate with context values
-        ... error = InsufficientFunds(required=100.0, available=50.0)
-        ... print(error.message)  # "Insufficient funds. Required: 100.0, Available: 50.0."
+        >>> class InsufficientFunds(ErrorDefinition):
+        ...     code = "BIZ_INSUFFICIENT_FUNDS"
+        ...     http_status = 422
+        ...     message_template = (
+        ...         "Insufficient funds. Required: {required}, Available: {available}."
+        ...     )
+        ...     is_retryable = False
+        >>>
+        >>> error = InsufficientFunds(required=100.0, available=50.0)
+        >>> error.message
+        'Insufficient funds. Required: 100.0, Available: 50.0.'
     """
 
     code: ClassVar[str]
@@ -179,68 +212,6 @@ class ErrorDefinition(metaclass=ErrorMeta):
     message_template: ClassVar[str]
     is_retryable: ClassVar[bool]
 
-    @classmethod
-    def instance_with(
-        cls,
-        message_template: str | None = None,
-        /,
-        *,
-        _code: str | None = None,
-        _http_status: int | None = None,
-        _is_retryable: bool | None = None,
-        _details: dict[str, Any] | None = None,
-        **context,
-    ) -> "ErrorDefinition":
-        """Creates a new ErrorDefinition instance with optional overrides.
-
-        This class method provides a factory-style way to create instances
-        with custom attributes while maintaining the class's default values
-        for unspecified parameters.
-
-        Args:
-            message_template: Optional custom message template override.
-            _code: Optional custom error code override.
-            _http_status: Optional custom HTTP status code override.
-            _is_retryable: Optional custom retryability flag override.
-            _details: Optional structured details dictionary.
-            **context: Context values for message formatting.
-
-        Returns:
-            A new ErrorDefinition instance with the specified attributes.
-
-        Example:
-            >>> error = InsufficientFunds.instance_with(
-            ...     required=100.0,
-            ...     available=50.0,
-            ...     _code="CUSTOM_CODE"
-            ... )
-        """
-        instance = cls(
-            message_template or cls.message_template,
-            _code=_code,
-            _http_status=_http_status,
-            _is_retryable=_is_retryable,
-            _details=_details,
-            **context,
-        )
-        return instance
-
-    @overload
-    def __init__(self: "ErrorDefinition", /, **context) -> None: ...
-
-    @overload
-    def __init__(
-        self: "ErrorDefinition",
-        message_template: str,
-        /,
-        *,
-        _code: str | None = None,
-        _http_status: int | None = None,
-        _is_retryable: bool | None = None,
-        _details: dict[str, Any] | None = None,
-        **context,
-    ) -> None: ...
-
     def __init__(
         self: "ErrorDefinition",
         message_template: str | None = None,
@@ -249,111 +220,159 @@ class ErrorDefinition(metaclass=ErrorMeta):
         _code: str | None = None,
         _http_status: int | None = None,
         _is_retryable: bool | None = None,
-        _details: dict[str, Any] | None = None,
-        **context,
+        _detail: dict[str, Any] | None = None,
+        **params: Any,
     ) -> None:
-        """Initializes a new ErrorDefinition instance.
+        """Initialize an error definition instance.
+
+        Instance values default to the class-level blueprint values. Any
+        provided override replaces only the corresponding attribute. All
+        remaining keyword arguments are captured as message-formatting
+        context values.
 
         Args:
-            message_template: Optional custom message template override.
-            _code: Optional custom error code override.
-            _http_status: Optional custom HTTP status code override.
-            _is_retryable: Optional custom retryability flag override.
-            _details: Optional structured details dictionary.
-            **context: Context values for message formatting.
+            message_template (str | None): Positional-only override for the
+                message template. Defaults to the class template.
+            _code (str | None): Override for the error code.
+            _http_status (int | None): Override for the HTTP status code.
+            _is_retryable (bool | None): Override for the retryability flag.
+                Unlike other overrides, ``False`` is a valid value and is
+                preserved.
+            _detail (dict[str, Any] | None): Structured error details.
+            **params (Any): Context values used to format the message
+                template.
         """
-        self.message_template = message_template or self.__class__.message_template
-        self.code = _code or self.__class__.code
-        self.http_status = _http_status or self.__class__.http_status
-        self.is_retryable = (
+        self._message_template = message_template or self.__class__.message_template
+        self._code = _code or self.__class__.code
+        self._http_status = _http_status or self.__class__.http_status
+        self._is_retryable = (
             self.__class__.is_retryable if _is_retryable is None else _is_retryable
         )
-        self._details = _details
-        self._context = context
+        self._detail = _detail
+        self._params = params
+
+    @property
+    def message_template(self) -> str:
+        """Return the instance message template.
+
+        Returns:
+            str: The message template in use for this instance.
+        """
+        return self._message_template
+
+    @property
+    def code(self) -> str:
+        """Return the instance error code.
+
+        Returns:
+            str: The error code in use for this instance.
+        """
+        return self._code
+
+    @property
+    def http_status(self) -> int:
+        """Return the instance HTTP status code.
+
+        Returns:
+            int: The HTTP status code in use for this instance.
+        """
+        return self._http_status
+
+    @property
+    def is_retryable(self) -> bool:
+        """Return whether the failed operation may be retried.
+
+        Returns:
+            bool: The retryability flag for this instance.
+        """
+        return self._is_retryable
 
     @property
     def message(self) -> str:
-        """Returns the formatted error message in English.
+        """Return the formatted message in the active language.
 
-        This property formats the message template with the provided context
-        values using the English locale. Useful for logging and debugging
-        where consistent English messages are desired.
+        Formats the message template with the instance context values using
+        the currently active language. Intended for display to end users in
+        their preferred language.
 
         Returns:
-            The formatted message string in English.
+            str: The formatted message in the active language.
 
         Example:
             >>> error = InsufficientFunds(required=100.0, available=50.0)
-            ... print(error.message)  # "Insufficient funds. Required: 100.0, Available: 50.0."
+            >>> error.message  # formatted in the active language
+        """
+        return format_lazy(_t(self.message_template), **self.params)
+
+    @property
+    def message_en(self) -> str:
+        """Return the formatted message in English.
+
+        Formats the message template with the instance context values using
+        the English locale, regardless of the active language. Intended for
+        logging and debugging where a stable language is desirable.
+
+        Returns:
+            str: The formatted message in English.
+
+        Example:
+            >>> error = InsufficientFunds(required=100.0, available=50.0)
+            >>> error.message_en
+            'Insufficient funds. Required: 100.0, Available: 50.0.'
         """
         with override("en"):
-            return format_lazy(_t(self.message_template), **self.context)
+            return format_lazy(_t(self.message_template), **self.params)
 
     @property
-    def user_message(self) -> str:
-        """Returns the formatted error message in the active language.
-
-        This property formats the message template with the provided context
-        values using the current active language. Suitable for displaying
-        error messages to end users in their preferred language.
+    def params(self) -> dict:
+        """Return the context values used for message formatting.
 
         Returns:
-            The formatted message string in the active language.
+            dict: The context dictionary. Empty if no values were supplied.
 
         Example:
             >>> error = InsufficientFunds(required=100.0, available=50.0)
-            ... print(error.user_message)  # Formatted in current language
+            >>> error.params
+            {'required': 100.0, 'available': 50.0}
         """
-        return format_lazy(_t(self.message_template), **self.context)
+        return self._params or {}
 
     @property
-    def context(self) -> dict:
-        """Returns the context dictionary for message formatting.
+    def detail(self) -> dict:
+        """Return the structured details for this error.
+
+        If no details were provided at construction time, they are lazily
+        initialized from :meth:`get_detail` and cached on the instance.
 
         Returns:
-            The dictionary of context values used for message formatting.
-
-        Example:
-            >>> error = InsufficientFunds(required=100.0, available=50.0)
-            ... print(error.context)  # {'required': 100.0, 'available': 50.0}
-        """
-        return self._context or {}
-
-    @property
-    def details(self) -> dict:
-        """Returns the structured details for the error.
-
-        This property lazily initializes details if they haven't been set yet
-        by calling get_details().
-
-        Returns:
-            The structured details dictionary.
+            dict: The structured details dictionary. May be empty.
 
         Example:
             >>> error = ValidationError(field_errors={"email": ["Invalid format"]})
-            ... print(error.details)  # {'field_errors': {'email': ['Invalid format']}}
+            >>> error.detail
+            {'field_errors': {'email': ['Invalid format']}}
         """
-        if self._details is None:
-            self._details = self.get_details()
-        return self._details
+        if self._detail is None:
+            self._detail = self.get_detail()
+        return self._detail
 
-    def get_details(self) -> dict:
-        """Hook for subclasses to provide structured error details.
+    def get_detail(self) -> dict:
+        """Provide structured details for the error.
 
-        This method should be overridden by subclasses that need to provide
-        additional structured information about the error. By default,
-        returns an empty dictionary.
+        Hook intended for subclasses that need to compute structured
+        details from instance state. The base implementation returns an
+        empty dictionary.
 
         Returns:
-            A dictionary containing structured error details.
+            dict: A dictionary of structured error details.
 
         Example:
             >>> class ValidationError(ErrorDefinition):
-            ...    def get_details(self) -> dict:
-            ...        return {
-            ...            "field_errors": self._field_errors,
-            ...            "non_field_errors": self._non_field_errors,
-            ...        }
+            ...     def get_detail(self) -> dict:
+            ...         return {
+            ...             "field_errors": self._field_errors,
+            ...             "non_field_errors": self._non_field_errors,
+            ...         }
         """
         return {}
 
@@ -361,78 +380,89 @@ class ErrorDefinition(metaclass=ErrorMeta):
         self,
         /,
         *,
-        _code: str | None = None,
-        _http_status: int | None = None,
-        _is_retryable: bool | None = None,
-        _details: dict[str, Any] | None = None,
+        message_template: str | None = None,
+        code: str | None = None,
+        http_status: int | None = None,
+        is_retryable: bool | None = None,
+        detail: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> "ErrorDefinition":
-        """Creates a new instance by deriving from the current one.
+        """Create a new instance derived from this one.
 
-        This method creates a new ErrorDefinition instance using the current
-        instance's attributes as defaults, allowing selective overrides of
-        specific attributes.
+        Builds a new instance of the same class using the current
+        instance's values as defaults, applying only the provided overrides.
+        When ``params`` is ``None``, the current context values are
+        inherited; otherwise they are fully replaced by ``params``.
 
         Args:
-            _code: Optional custom error code override.
-            _http_status: Optional custom HTTP status code override.
-            _is_retryable: Optional custom retryability flag override.
-            _details: Optional structured details dictionary.
+            message_template (str | None): Override for the message template.
+            code (str | None): Override for the error code.
+            http_status (int | None): Override for the HTTP status code.
+            is_retryable (bool | None): Override for the retryability flag.
+                ``None`` preserves the current value.
+            detail (dict[str, Any] | None): Override for the structured
+                details.
+            params (dict[str, Any] | None): Replacement context values. If
+                ``None``, the current context is inherited.
 
         Returns:
-            A new ErrorDefinition instance with the specified overrides.
+            ErrorDefinition: A new instance with the requested overrides.
 
         Example:
-            >>> base_error = InsufficientFunds(required=100.0, available=50.0)
-            ... custom_error = base_error.derive(_code="CUSTOM_CODE")
+            >>> base = InsufficientFunds(required=100.0, available=50.0)
+            >>> custom = base.derive(code="CUSTOM_CODE")
         """
         new_instance = self.__class__(
-            self.message_template,
-            _code=_code or self.code,
-            _http_status=_http_status or self.http_status,
-            _is_retryable=self.is_retryable if _is_retryable is None else _is_retryable,
-            _details=_details or self.details,
-            **self.context,
+            message_template or self.message_template,
+            _code=code or self.code,
+            _http_status=http_status or self.http_status,
+            _is_retryable=self.is_retryable if is_retryable is None else is_retryable,
+            _detail=detail or self.detail,
+            **(self.params if params is None else params),
         )
 
         return new_instance
 
     def to_dict(self) -> dict:
-        """Converts the error definition to a dictionary representation.
+        """Serialize the error definition to a dictionary.
 
-        This method serializes the error definition into a dictionary
-        suitable for JSON responses or logging.
+        Produces a dictionary suitable for JSON responses or structured
+        logging, containing the code, HTTP status, formatted message,
+        retryability flag, and structured details.
 
         Returns:
-            A dictionary containing the error code, HTTP status, user message,
-            retryability flag, and structured details.
+            dict: A dictionary with keys ``code``, ``http_status``,
+            ``message``, ``is_retryable``, and ``detail``.
 
         Example:
             >>> error = InsufficientFunds(required=100.0, available=50.0)
-            ... print(error.to_dict())
-            ... # {
-            ... #     "code": "BIZ_INSUFFICIENT_FUNDS",
-            ... #     "http_status": 422,
-            ... #     "message": "Insufficient funds. Required: 100.0, Available: 50.0.",
-            ... #     "is_retryable": False,
-            ... #     "details": {}
-            ... # }
+            >>> error.to_dict()
+            {
+                "code": "BIZ_INSUFFICIENT_FUNDS",
+                "http_status": 422,
+                "message": "Insufficient funds. Required: 100.0, Available: 50.0.",
+                "is_retryable": False,
+                "detail": {}
+            }
         """
         return {
             "code": self.code,
             "http_status": self.http_status,
-            "message": self.user_message,
+            "message": self.message,
             "is_retryable": self.is_retryable,
-            "details": self.details,
+            "detail": self.detail,
         }
 
     def __eq__(self, other: Any) -> bool:
-        """Compares the error instance with a string code or another error.
+        """Compare this instance with a string code or another error.
 
         Args:
-            other: The object to compare with (string code or ErrorDefinition).
+            other (Any): The value to compare against. Either a string
+                error code or another :class:`ErrorDefinition` instance.
 
         Returns:
-            True if the error codes match, False otherwise.
+            bool | NotImplemented: ``True`` if the codes match, ``False``
+            otherwise, or ``NotImplemented`` for unsupported operand types.
         """
         if isinstance(other, str):
             return self.code == other
@@ -441,29 +471,32 @@ class ErrorDefinition(metaclass=ErrorMeta):
         return NotImplemented
 
     def __str__(self) -> str:
-        """Returns the formatted user message as the string representation.
+        """Return the formatted message as the string representation.
 
         Returns:
-            The formatted user message string.
+            str: The formatted message in the active language.
         """
         return self.message
 
     def __repr__(self) -> str:
-        """Returns a detailed representation of the error instance.
+        """Return a detailed, debug-friendly representation of the instance.
 
         Returns:
-            A string containing the class name and context values.
+            str: A string of the form
+            ``ClassName(message_template='...', key1=value1, key2=value2)``.
         """
+        params = ", ".join(f"{key}={value!r}" for key, value in self.params.items())
         return (
-            f"{self.__class__.__name__}({self.context})"
-            if self.context
-            else f"{self.__class__.__name__}()"
+            f"{type(self).__name__}("
+            f"message_template={self.message_template!r}"
+            f"{', ' + params if params else ''}"
+            f")"
         )
 
     def __hash__(self) -> int:
-        """Returns a hash based on the error code.
+        """Return a hash derived from the error code.
 
         Returns:
-            The hash of the error code string.
+            int: Hash of the instance error code.
         """
         return hash(self.code)

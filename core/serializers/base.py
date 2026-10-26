@@ -7,7 +7,7 @@ while maintaining standard DRF serializer behavior.
 
 from rest_framework import serializers
 
-from .mixins.base import BaseSerializerMixin
+from core.serializers.mixins.base import BaseSerializerMixin
 
 
 class BaseSerializer(BaseSerializerMixin, serializers.Serializer):
