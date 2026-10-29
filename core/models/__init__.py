@@ -11,7 +11,7 @@ different use cases.
 """
 
 from .abstract import AbstractModel
-from .base import BaseModel
+from .base import Model
 from .soft_deletable import SoftDeletableModel
 from .undeletable import UndeletableModel
 from .user import BaseUser
@@ -19,7 +19,7 @@ from .user import BaseUser
 
 __all__ = [
     "AbstractModel",
-    "BaseModel",
+    "Model",
     "SoftDeletableModel",
     "UndeletableModel",
     "BaseUser",

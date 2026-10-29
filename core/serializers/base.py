@@ -1,6 +1,6 @@
 """Provides a base serializer class that combines BaseSerializerMixin with DRF's Serializer.
 
-This module implements a BaseSerializer that serves as a foundation for all
+This module implements a Serializer that serves as a foundation for all
 API serializers in the application, incorporating common mixin functionality
 while maintaining standard DRF serializer behavior.
 """
@@ -10,7 +10,7 @@ from rest_framework import serializers
 from core.serializers.mixins.base import BaseSerializerMixin
 
 
-class BaseSerializer(BaseSerializerMixin, serializers.Serializer):
+class Serializer(BaseSerializerMixin, serializers.Serializer):
     """A base serializer that extends Django REST Framework's Serializer.
 
     This class combines the functionality of BaseSerializerMixin with DRF's

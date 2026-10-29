@@ -1,7 +1,7 @@
 """Iranian national code validator and convenience validation function.
 
 This module provides :class:`NationalCodeValidator`, a concrete
-:class:`~core.validators.base.BaseValidator` that validates Iranian
+:class:`~core.validators.base.Validator` that validates Iranian
 national codes using the standard checksum algorithm. A
 module-level :func:`validate_national_code` helper wraps the validator
 for one-off, input-layer usage.
@@ -12,10 +12,10 @@ from typing import Any
 from django.utils.translation import gettext_lazy as _t
 
 from core.exceptions.errors.validation import InvalidFormat
-from core.validators.base import BaseValidator
+from core.validators.base import Validator
 
 
-class NationalCodeValidator(BaseValidator):
+class NationalCodeValidator(Validator):
     """Validate an Iranian national code.
 
     A value passes validation when, after string conversion and stripping,
@@ -27,7 +27,7 @@ class NationalCodeValidator(BaseValidator):
     4. Its check digit (the 10th digit) matches the value derived from the
        standard weighted checksum algorithm (mod 11).
 
-    Blank handling is inherited from :class:`BaseValidator`. ``None`` and
+    Blank handling is inherited from :class:`Validator`. ``None`` and
     the empty string are also short-circuited locally, deferring blank
     handling to the caller (for example, a model field).
 
@@ -91,7 +91,7 @@ def validate_national_code(
 
     Convenience wrapper around :class:`NationalCodeValidator` that builds a
     validator configured with
-    :meth:`~core.validators.base.BaseValidator.for_input` and runs it
+    :meth:`~core.validators.base.Validator.for_input` and runs it
     against ``value``. Intended for one-off checks where holding onto a
     validator instance is unnecessary.
 

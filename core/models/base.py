@@ -14,7 +14,7 @@ from core.models.managers.base import BaseManager
 from core.models.mixins.base import BaseModelMixin
 
 
-class BaseModel(BaseModelMixin, AbstractModel):
+class Model(BaseModelMixin, AbstractModel):
     """A comprehensive base model providing timestamp fields, UUID, and custom manager.
 
     This abstract model inherits from both BaseModelMixin and AbstractModel to
@@ -48,7 +48,7 @@ class BaseModel(BaseModelMixin, AbstractModel):
     objects: BaseManager = BaseManager()
 
     class Meta:
-        """Metadata configuration for BaseModel.
+        """Metadata configuration for Model.
 
         Makes this model abstract so it doesn't create a database table,
         but provides fields and manager to all inheriting models.

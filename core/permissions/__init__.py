@@ -1,6 +1,6 @@
-from .base import BasePermission
+from .base import Permission
 
 
 __all__ = [
-    "BasePermission",
+    "Permission",
 ]

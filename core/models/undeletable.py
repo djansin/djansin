@@ -1,8 +1,8 @@
 """Undeletable base model that prevents accidental record deletion.
 
-This module defines an abstract model that extends BaseModel with delete
+This module defines an abstract model that extends Model with delete
 protection safeguards. The model inherits timestamp fields, UUID identifier,
-and custom manager from BaseModel, and adds protection against accidental
+and custom manager from Model, and adds protection against accidental
 deletion by overriding the delete() method to raise an exception.
 
 The model is designed for critical data that should never be deleted, such as
@@ -15,19 +15,19 @@ from django.utils.translation import gettext_lazy as _t
 
 from core.exceptions import BusinessError
 from core.exceptions.errors.business import OperationNotAllowed
-from core.models.base import BaseModel
+from core.models.base import Model
 from core.models.managers.undeletable import UndeletableManager
 
 
-class UndeletableModel(BaseModel):
+class UndeletableModel(Model):
     """A base model that prevents deletion of records by default.
 
-    This abstract model extends BaseModel with delete protection, ensuring
+    This abstract model extends Model with delete protection, ensuring
     that records cannot be accidentally or unintentionally deleted. It is
     ideal for models that store critical or reference data that must be
     preserved.
 
-    Features inherited from BaseModel:
+    Features inherited from Model:
     - Automatic timestamp tracking (created_at, updated_at)
     - Public UUID identifier for external references
     - Custom BaseManager with common query utilities

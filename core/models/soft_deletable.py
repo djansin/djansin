@@ -1,8 +1,8 @@
 """Soft-deletable base model combining soft deletion with core model features.
 
-This module defines an abstract model that extends BaseModel with soft deletion
+This module defines an abstract model that extends Model with soft deletion
 capabilities. The model inherits timestamp fields, UUID identifier, and custom
-manager from BaseModel, and adds the deleted_at field and soft deletion methods
+manager from Model, and adds the deleted_at field and soft deletion methods
 from SoftDeletableModelMixin.
 
 The model includes specialized database indexes optimized for common soft-delete
@@ -12,19 +12,19 @@ by time ranges.
 
 from django.db import models
 
-from core.models.base import BaseModel
+from core.models.base import Model
 from core.models.managers.soft_deletable import SoftDeletableManager
 from core.models.mixins.soft_deletable import SoftDeletableModelMixin
 
 
-class SoftDeletableModel(SoftDeletableModelMixin, BaseModel):
+class SoftDeletableModel(SoftDeletableModelMixin, Model):
     """A comprehensive base model with soft deletion capabilities.
 
-    This abstract model combines the core features of BaseModel with soft
+    This abstract model combines the core features of Model with soft
     deletion functionality from SoftDeletableModelMixin, providing a complete
     foundation for models that require logical deletion.
 
-    Features inherited from BaseModel:
+    Features inherited from Model:
     - Automatic timestamp tracking (created_at, updated_at)
     - Public UUID identifier for external references
     - Custom BaseManager with common query utilities

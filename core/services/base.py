@@ -1,13 +1,13 @@
 """Base class for service-layer components.
 
-This module defines :class:`BaseService`, a minimal, dependency-free base
+This module defines :class:`Service`, a minimal, dependency-free base
 class intended to be inherited by concrete service classes across the
 project. It provides a shared marker type for service-layer components
 without imposing any behavior.
 """
 
 
-class BaseService:
+class Service:
     """Base class for all service-layer components.
 
     Serves as a common ancestor and marker type for service classes. It

@@ -1,6 +1,6 @@
 """Base validator infrastructure for layered validation.
 
-This module provides the abstract base class :class:`BaseValidator`, which
+This module provides the abstract base class :class:`Validator`, which
 defines a reusable, framework-aware validation pipeline. Concrete
 validators subclass it and implement only the ``validate`` method, while
 inheriting normalization, blank-handling, error-factory selection, and
@@ -8,13 +8,13 @@ value-object semantics (equality, hashing, representation).
 
 The design separates *what* is validated from *where* the validation
 result is consumed. The same validator instance can be re-targeted for
-different layers via :meth:`BaseValidator.for_input` and
-:meth:`BaseValidator.for_domain`, producing shallow clones that raise the
+different layers via :meth:`Validator.for_input` and
+:meth:`Validator.for_domain`, producing shallow clones that raise the
 appropriate error type (DRF input errors, domain errors, or the default
 Django input errors).
 
 Typical usage:
-    >>> class AgeValidator(BaseValidator):
+    >>> class AgeValidator(Validator):
     ...     def validate(self, value):
     ...         if value < 0:
     ...             self.raise_validation_error("age.negative")
@@ -43,7 +43,7 @@ from core.exceptions.frameworks import DjangoInputError, DrfInputError
 def _default_error_factory(error, **context):
     """Build the default validation error.
 
-    Used as the fallback error factory for :class:`BaseValidator` when no
+    Used as the fallback error factory for :class:`Validator` when no
     explicit ``error_factory`` is provided.
 
     Args:
@@ -58,7 +58,7 @@ def _default_error_factory(error, **context):
 
 
 @deconstructible
-class BaseValidator(ABC):
+class Validator(ABC):
     """Abstract base class for all validators.
 
     Subclasses must implement :meth:`validate`. All other behavior —
@@ -85,7 +85,7 @@ class BaseValidator(ABC):
             validator's identity for equality and hashing.
 
     Example:
-        >>> class PositiveIntValidator(BaseValidator):
+        >>> class PositiveIntValidator(Validator):
         ...     def validate(self, value):
         ...         if not isinstance(value, int) or value <= 0:
         ...             self.raise_validation_error("value.not_positive")

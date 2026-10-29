@@ -1,8 +1,8 @@
-from .base import BaseSerializer
+from .base import Serializer
 from .model import ModelSerializer
 
 
 __all__ = [
-    "BaseSerializer",
+    "Serializer",
     "ModelSerializer",
 ]

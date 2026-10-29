@@ -1,7 +1,7 @@
 """Username validator and convenience validation function.
 
 This module provides :class:`UsernameValidator`, a concrete
-:class:`~core.validators.base.BaseValidator` that validates usernames
+:class:`~core.validators.base.Validator` that validates usernames
 using a configurable length range and a shared error-collection utility.
 A module-level :func:`validate_username` helper wraps the validator for
 one-off, input-layer usage.
@@ -16,10 +16,10 @@ from core.exceptions import AppError, ValidationError
 from core.exceptions.errors.app import InvalidValue
 from core.exceptions.errors.validation import InvalidUsername
 from core.utils.user_identifier import collect_username_errors
-from core.validators.base import BaseValidator
+from core.validators.base import Validator
 
 
-class UsernameValidator(BaseValidator):
+class UsernameValidator(Validator):
     """Validate a username against configurable length constraints.
 
     The actual validation rules are delegated to
@@ -28,8 +28,8 @@ class UsernameValidator(BaseValidator):
     non-empty, an :class:`~core.exceptions.errors.validation.InvalidUsername`
     is raised with the collected errors attached.
 
-    Blank handling is inherited from :class:`BaseValidator`; blank values
-    are short-circuited in :meth:`~core.validators.base.BaseValidator.run`
+    Blank handling is inherited from :class:`Validator`; blank values
+    are short-circuited in :meth:`~core.validators.base.Validator.run`
     when ``allow_blank`` is ``True``.
 
     Args:
@@ -104,7 +104,7 @@ class UsernameValidator(BaseValidator):
         all of them.
 
         Blank handling is intentionally left to
-        :meth:`~core.validators.base.BaseValidator.run`. This method assumes
+        :meth:`~core.validators.base.Validator.run`. This method assumes
         the value is non-blank (or that ``allow_blank`` is ``False`` and the
         caller accepts that blank values will be validated here).
 
@@ -133,7 +133,7 @@ def validate_username(
 
     Convenience wrapper around :class:`UsernameValidator` that builds a
     validator configured with
-    :meth:`~core.validators.base.BaseValidator.for_input` and runs it
+    :meth:`~core.validators.base.Validator.for_input` and runs it
     against ``value``. Intended for one-off checks where holding onto a
     validator instance is unnecessary.
 

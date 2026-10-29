@@ -1,7 +1,7 @@
 """Birth date validator and convenience validation function.
 
 This module provides :class:`BirthDateValidator`, a concrete
-:class:`~core.validators.base.BaseValidator` that checks a value is a
+:class:`~core.validators.base.Validator` that checks a value is a
 valid date, is not in the future, and yields an age within a configurable
 range. A module-level :func:`validate_birth_date` helper wraps the
 validator for one-off, input-layer usage.
@@ -18,17 +18,17 @@ from core.exceptions import AppError, ValidationError
 from core.exceptions.errors.app import InvalidValue
 from core.exceptions.errors.validation import InvalidFormat
 from core.utils.date_utils import compute_age
-from core.validators.base import BaseValidator
+from core.validators.base import Validator
 
 
-class BirthDateValidator(BaseValidator):
+class BirthDateValidator(Validator):
     """Validate that a value is a birth date within an allowed age range.
 
     A value passes validation when it is a :class:`datetime.date`, is not
     in the future relative to the reference date, and corresponds to an age
     between ``min_age`` and ``max_age`` (inclusive).
 
-    Blank handling is inherited from :class:`BaseValidator`: when
+    Blank handling is inherited from :class:`Validator`: when
     ``allow_blank`` is ``True``, blank values bypass validation entirely.
 
     Args:
@@ -168,7 +168,7 @@ def validate_birth_date(
     """Validate a birth date using an input-layer validator.
 
     Convenience wrapper around :class:`BirthDateValidator` that builds a
-    validator configured with :meth:`~core.validators.base.BaseValidator.for_input`
+    validator configured with :meth:`~core.validators.base.Validator.for_input`
     and runs it against ``value``. Intended for one-off checks where
     holding onto a validator instance is unnecessary.
 

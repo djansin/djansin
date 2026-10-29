@@ -1,7 +1,7 @@
 """Base user model implementation extending Django's authentication framework.
 
 This module defines a comprehensive base user model that combines Django's
-AbstractBaseUser and PermissionsMixin with the application's BaseModel,
+AbstractBaseUser and PermissionsMixin with the application's Model,
 providing a complete user management solution. The model includes standard
 user fields, permission management, activity tracking, and convenience
 methods for user management operations.
@@ -16,16 +16,16 @@ from django.db.models import DateTimeField
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
-from core.models.base import BaseModel
+from core.models.base import Model
 from core.models.managers.user import BaseUserManager
 from core.validators import UsernameValidator
 
 
-class BaseUser(AbstractBaseUser, PermissionsMixin, BaseModel):
+class BaseUser(AbstractBaseUser, PermissionsMixin, Model):
     """A comprehensive base user model for authentication and authorization.
 
     This abstract model extends Django's AbstractBaseUser and PermissionsMixin
-    while incorporating the application's BaseModel features. It provides a
+    while incorporating the application's Model features. It provides a
     complete user implementation with username-based authentication, permission
     management, activity tracking, and user management utilities.
 

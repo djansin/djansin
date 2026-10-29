@@ -8,25 +8,25 @@ referencing constants defined on a specific validator).
 
 The exported names fall into two groups:
 
-* Validator classes — subclass :class:`~core.validators.base.BaseValidator`
+* Validator classes — subclass :class:`~core.validators.base.Validator`
   and are intended to be instantiated once and reused, optionally
   re-targeted per layer via
-  :meth:`~core.validators.base.BaseValidator.for_input` or
-  :meth:`~core.validators.base.BaseValidator.for_domain`.
+  :meth:`~core.validators.base.Validator.for_input` or
+  :meth:`~core.validators.base.Validator.for_domain`.
 * Convenience functions — module-level callables that build an
   input-layer validator on the fly and run it against a single value.
   Intended for one-off checks and for use in Django's
   ``validators=[...]`` lists.
 """
 
-from .base import BaseValidator
+from .base import Validator
 from .birth_date import BirthDateValidator, validate_birth_date
 from .national_code import NationalCodeValidator, validate_national_code
 from .username import UsernameValidator, validate_username
 
 
 __all__ = [
-    "BaseValidator",
+    "Validator",
     "BirthDateValidator",
     "validate_birth_date",
     "NationalCodeValidator",

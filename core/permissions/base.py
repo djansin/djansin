@@ -1,4 +1,4 @@
-from rest_framework.permissions import BasePermission as DrfBasePermission
+from rest_framework.permissions import BasePermission
 
 
-class BasePermission(DrfBasePermission): ...
+class Permission(BasePermission): ...
