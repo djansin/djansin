@@ -38,7 +38,7 @@ class AppErrorDefinition(ErrorDefinition):
     Example:
         >>> # Subclass this for application-specific errors
         ... class MyAppError(AppErrorDefinition):
-        ...     code = "MY_APP_ERROR"
+        ...     code = "APP:MY_APP_ERROR"
         ...     http_status = 400
     """
 
@@ -64,7 +64,7 @@ class AuthErrorDefinition(ErrorDefinition):
     Example:
         >>> # Subclass this for authentication-specific errors
         ... class InvalidToken(AuthErrorDefinition):
-        ...     code = "AUTH_INVALID_TOKEN"
+        ...     code = "AUTH:INVALID_TOKEN"
     """
 
     code = "AUTH:ERROR"
@@ -89,7 +89,7 @@ class BizErrorDefinition(ErrorDefinition):
     Example:
         >>> # Subclass this for business logic-specific errors
         ... class InsufficientFunds(BizErrorDefinition):
-        ...     code = "BIZ_INSUFFICIENT_FUNDS"
+        ...     code = "BIZ:INSUFFICIENT_FUNDS"
     """
 
     code = "BIZ:ERROR"
@@ -114,7 +114,7 @@ class DbErrorDefinition(ErrorDefinition):
     Example:
         >>> # Subclass this for database-specific errors
         ... class DuplicateEntry(DbErrorDefinition):
-        ...     code = "DB_DUPLICATE_ENTRY"
+        ...     code = "DB:DUPLICATE_ENTRY"
     """
 
     code = "DB:ERROR"
@@ -138,7 +138,7 @@ class ExtErrorDefinition(ErrorDefinition):
     Example:
         >>> # Subclass this for external service-specific errors
         ... class PaymentGatewayError(ExtErrorDefinition):
-        ...     code = "EXT_PAYMENT_GATEWAY_ERROR"
+        ...     code = "EXT:PAYMENT_GATEWAY_ERROR"
     """
 
     code = "EXT:ERROR"
@@ -162,7 +162,7 @@ class HttpErrorDefinition(ErrorDefinition):
     Example:
         >>> # Subclass this for HTTP-specific errors
         ... class UnsupportedMediaType(HttpErrorDefinition):
-        ...     code = "HTTP_UNSUPPORTED_MEDIA_TYPE"
+        ...     code = "HTTP:UNSUPPORTED_MEDIA_TYPE"
     """
 
     code = "HTTP:ERROR"
@@ -186,7 +186,7 @@ class SysErrorDefinition(ErrorDefinition):
     Example:
         >>> # Subclass this for system-specific errors
         ... class ResourceExhaustion(SysErrorDefinition):
-        ...     code = "SYS_RESOURCE_EXHAUSTION"
+        ...     code = "SYS:RESOURCE_EXHAUSTION"
     """
 
     code = "SYS:ERROR"
@@ -203,17 +203,19 @@ class ValidErrorDefinition(ErrorDefinition):
 
     Attributes:
         code: "VALID:ERROR"
-        http_status: 400 Bad Request
+        http_status: 500 Internal Server Error
         message_template: "The provided data failed validation."
         is_retryable: False
 
     Example:
-        >>> # Subclass this for validation-specific errors
+        >>> # Subclass this for validation-specific errors.
+        ... # User-facing failures should override http_status to 4xx:
         ... class InvalidEmailFormat(ValidErrorDefinition):
-        ...     code = "VALID_INVALID_EMAIL_FORMAT"
+        ...     code = "VALID:INVALID_EMAIL_FORMAT"
+        ...     http_status = 422
     """
 
     code = "VALID:ERROR"
-    http_status = 400
+    http_status = 500
     message_template = _n("The provided data failed validation.")
     is_retryable = False
