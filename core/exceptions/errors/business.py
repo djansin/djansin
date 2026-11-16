@@ -850,3 +850,50 @@ class TrustLevelDemotion(BizErrorDefinition):
         Passes all arguments to the parent class constructor.
         """
         super().__init__(message_template, **kwds)
+
+
+class BusinessRuleViolation(BizErrorDefinition):
+    """Error definition for generic business rule violations.
+
+    This error occurs when an operation violates a business rule that does
+    not fall into a more specific category (e.g., insufficient funds,
+    duplicate resource, or invalid state transition). It serves as a
+    general-purpose fallback for domain-level rule violations.
+
+    A custom ``reason`` should usually be provided to explain what rule
+    was violated. If omitted, the default message template will be used.
+
+    Attributes:
+        code: "BIZ:BUSINESS_RULE_VIOLATION"
+        http_status: 422 Unprocessable Entity
+        message_template: "Business rule violation. {reason}"
+        is_retryable: False (retrying without changes won't help)
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(BusinessRuleViolation(
+        ...     reason="Refresh token has already been revoked."
+        ... ))
+    """
+
+    code = "BIZ:BUSINESS_RULE_VIOLATION"
+    http_status = 422
+    message_template = _n("Business rule violation. {reason}")
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        reason: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes a business rule violation error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)

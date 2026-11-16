@@ -194,3 +194,45 @@ class UserCreationFailed(SysErrorDefinition):
         Passes all arguments to the parent class constructor.
         """
         super().__init__(message_template, **kwds)
+
+
+class ServiceExecutionFailed(SysErrorDefinition):
+    """Error definition for service execution failures.
+
+    This error occurs when a system service fails to execute an
+    operation due to internal errors, misconfiguration, or unexpected
+    conditions during execution. Since it usually requires
+    investigation, the operation is not considered retryable by default.
+
+    Attributes:
+        code: "SYS:SERVICE_EXECUTION_FAILED"
+        http_status: 500 Internal Server Error
+        message_template: "Service execution failed. Reference: {reference_id}"
+        is_retryable: False (requires investigation)
+
+    Example:
+        >>> # Wrap this definition in a system-specific exception
+        ... raise SystemError(ServiceExecutionFailed(reference_id="EXEC-12345"))
+    """
+
+    code = "SYS:SERVICE_EXECUTION_FAILED"
+    http_status = 500
+    message_template = _n("Service execution failed. Reference: {reference_id}")
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        reference_id: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes a service-execution-failed error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
