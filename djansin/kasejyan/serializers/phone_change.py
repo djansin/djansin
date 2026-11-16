@@ -1,0 +1,124 @@
+"""Serializer definitions for the phone-change code-request flow."""
+
+from django.utils.translation import gettext_lazy as _t
+from rest_framework import serializers
+
+from core.exceptions.errors.validation import InvalidFormat
+from core.serializers import Serializer
+from core.utils.user_identifier import is_valid_phone
+
+
+class ChangePhoneSerializer(Serializer):
+    """Serializer validating the payload for confirming a phone change.
+
+    Accepts the new phone number and the six-digit verification code
+    that was sent to it.
+
+    Attributes:
+        new_phone (serializers.CharField): Write-only new phone number.
+        code (serializers.CharField): Write-only six-digit verification
+            code that was sent to ``new_phone``.
+    """
+
+    new_phone = serializers.CharField(
+        write_only=True,
+        required=True,
+        allow_blank=False,
+        allow_null=False,
+        trim_whitespace=True,
+        error_messages={
+            "required": _t("New phone number is required."),
+            "blank": _t("New phone number cannot be blank."),
+            "null": _t("New phone number cannot be null."),
+        },
+    )
+    code = serializers.CharField(
+        write_only=True,
+        required=True,
+        allow_blank=False,
+        allow_null=False,
+        min_length=6,
+        max_length=6,
+        error_messages={
+            "required": _t("Verification code is required."),
+            "blank": _t("Verification code cannot be blank."),
+            "null": _t("Verification code cannot be null."),
+            "min_length": _t("Verification code must be exactly 6 characters long."),
+            "max_length": _t("Verification code must be exactly 6 characters long."),
+        },
+    )
+
+    def validate_new_phone(self, new_phone: str) -> str:
+        """Validate the raw ``new_phone`` field value.
+
+        Ensures the value satisfies the project's phone-number format
+        rules. Deeper checks (ownership, existence) are delegated to
+        the service layer.
+
+        Args:
+            new_phone (str): The raw phone number provided by the client.
+
+        Returns:
+            str: The validated phone number, unchanged.
+
+        Raises:
+            InputError: If the phone number does not conform to the
+                expected format.
+        """
+        if not is_valid_phone(identifier=new_phone):
+            raise self.raise_input_error(
+                InvalidFormat(expected_format=_t("a valid phone number"))
+            )
+
+        return new_phone
+
+
+class RequestChangePhoneSerializer(Serializer):
+    """Serializer validating the payload for requesting a phone-change code.
+
+    Accepts a single write-only ``new_phone`` number. Field-level
+    validation enforces presence and syntactic validity; the
+    "not already owned" rule and code dispatch are handled by the
+    service layer.
+
+    Attributes:
+        new_phone (serializers.CharField): Write-only phone number that
+            should replace the current one.
+    """
+
+    new_phone = serializers.CharField(
+        write_only=True,
+        required=True,
+        allow_blank=False,
+        allow_null=False,
+        trim_whitespace=True,
+        error_messages={
+            "required": _t("New phone number is required."),
+            "blank": _t("New phone number cannot be blank."),
+            "null": _t("New phone number cannot be null."),
+        },
+    )
+
+    def validate_new_phone(self, new_phone: str) -> str:
+        """Validate the raw ``new_phone`` field value.
+
+        Ensures the value satisfies the project's phone-number format
+        rules. Deeper checks (ownership, existence) are delegated to
+        the service layer.
+
+        Args:
+            new_phone (str): The raw phone number provided by the client.
+
+        Returns:
+            str: The validated phone number, unchanged.
+
+        Raises:
+            InputError: If the phone number does not conform to the
+                expected format.
+        """
+        if not is_valid_phone(identifier=new_phone):
+            raise self.raise_input_error(
+                InvalidFormat(expected_format=_t("a valid phone number"))
+            )
+
+        return new_phone

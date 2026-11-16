@@ -38,4 +38,5 @@ class KasejyanConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "djansin.kasejyan"
+    label = "kasejyan"
     verbose_name = "Kasejyan Application"

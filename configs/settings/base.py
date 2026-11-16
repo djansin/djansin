@@ -61,7 +61,7 @@ CONTRIB_APPS = [
 ]
 
 PACKAGE_APPS = [
-    # PACKAGE APPS
+    "djansin.kasejyan",
 ]
 
 PROJECT_APPS = [
@@ -82,7 +82,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "configs.urls.production"
 
-# AUTH_USER_MODEL = "kasejyan.User"
+AUTH_USER_MODEL = "kasejyan.User"
 
 TEMPLATES = [
     {
@@ -160,7 +160,7 @@ MEDIA_ROOT = env.path("MEDIA_ROOT")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTHENTICATION_BACKENDS = [
-    # "apps.kasejyan.backends.UniversalAuthBackend",
+    "djansin.kasejyan.backends.UniversalAuthBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 
