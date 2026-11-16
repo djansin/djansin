@@ -196,7 +196,7 @@ class BaseAppException(Exception, Generic[ErrorDefinitionType]):
         """
         if isinstance(error, str) or error is None:
             error_cls = self.__class__.error_cls
-            error = error_cls(error, **params)
+            error = error_cls(error, **(params or {}))
 
         self._error = error.derive(
             code=code,
@@ -219,7 +219,7 @@ class BaseAppException(Exception, Generic[ErrorDefinitionType]):
         return self._error
 
     @property
-    def message(self) -> str:
+    def message_en(self) -> str:
         """Return the formatted diagnostic message in English.
 
         Intended for logs, traces, and debugging. The message combines the
@@ -231,6 +231,17 @@ class BaseAppException(Exception, Generic[ErrorDefinitionType]):
         """
         return f"[{self.severity.name}] {self.error.code}: {self.error.message_en}"
 
+    @property
+    def message(self) -> str:
+        """Return the formatted message in the active language.
+
+        Intended for display to end users in their preferred language.
+
+        Returns:
+            str: The formatted message in the active language.
+        """
+        return self.error.message
+
     @message.setter
     def message(self, value: str) -> None:
         """Replace the underlying message template.
@@ -241,24 +252,13 @@ class BaseAppException(Exception, Generic[ErrorDefinitionType]):
         self._error = self.error.derive(message_template=value)
 
     @property
-    def user_message(self) -> str:
-        """Return the formatted message in the active language.
-
-        Intended for display to end users in their preferred language.
-
-        Returns:
-            str: The formatted message in the active language.
-        """
-        return self.error.message
-
-    @property
     def code(self) -> str:
         """Return the error code.
 
         Returns:
             str: The error code of the wrapped definition.
         """
-        return self.error.code
+        return self.error.get_code()
 
     @code.setter
     def code(self, value: str) -> None:
@@ -312,7 +312,7 @@ class BaseAppException(Exception, Generic[ErrorDefinitionType]):
         Returns:
             int: The HTTP status code of the wrapped definition.
         """
-        return self.error.http_status
+        return self.error.get_http_status()
 
     @http_status.setter
     def http_status(self, value: int) -> None:
@@ -331,7 +331,7 @@ class BaseAppException(Exception, Generic[ErrorDefinitionType]):
             bool: ``True`` if the operation can be retried, ``False``
             otherwise.
         """
-        return self.error.is_retryable
+        return self.error.get_is_retryable()
 
     @is_retryable.setter
     def is_retryable(self, value: bool) -> None:

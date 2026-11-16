@@ -252,42 +252,6 @@ class ErrorDefinition(metaclass=ErrorMeta):
         self._params = params
 
     @property
-    def message_template(self) -> str:
-        """Return the instance message template.
-
-        Returns:
-            str: The message template in use for this instance.
-        """
-        return self._message_template
-
-    @property
-    def code(self) -> str:
-        """Return the instance error code.
-
-        Returns:
-            str: The error code in use for this instance.
-        """
-        return self._code
-
-    @property
-    def http_status(self) -> int:
-        """Return the instance HTTP status code.
-
-        Returns:
-            int: The HTTP status code in use for this instance.
-        """
-        return self._http_status
-
-    @property
-    def is_retryable(self) -> bool:
-        """Return whether the failed operation may be retried.
-
-        Returns:
-            bool: The retryability flag for this instance.
-        """
-        return self._is_retryable
-
-    @property
     def message(self) -> str:
         """Return the formatted message in the active language.
 
@@ -302,7 +266,7 @@ class ErrorDefinition(metaclass=ErrorMeta):
             >>> error = InsufficientFunds(required=100.0, available=50.0)
             >>> error.message  # formatted in the active language
         """
-        return format_lazy(_t(self.message_template), **self.params)
+        return format_lazy(_t(self.get_message_template()), **self.params)
 
     @property
     def message_en(self) -> str:
@@ -321,7 +285,7 @@ class ErrorDefinition(metaclass=ErrorMeta):
             'Insufficient funds. Required: 100.0, Available: 50.0.'
         """
         with override("en"):
-            return format_lazy(_t(self.message_template), **self.params)
+            return format_lazy(_t(self.get_message_template()), **self.params)
 
     @property
     def params(self) -> dict:
@@ -355,6 +319,38 @@ class ErrorDefinition(metaclass=ErrorMeta):
         if self._detail is None:
             self._detail = self.get_detail()
         return self._detail
+
+    def get_message_template(self) -> str:
+        """Return the instance message template.
+
+        Returns:
+            str: The message template in use for this instance.
+        """
+        return self._message_template
+
+    def get_code(self) -> str:
+        """Return the instance error code.
+
+        Returns:
+            str: The error code in use for this instance.
+        """
+        return self._code
+
+    def get_http_status(self) -> int:
+        """Return the instance HTTP status code.
+
+        Returns:
+            int: The HTTP status code in use for this instance.
+        """
+        return self._http_status
+
+    def get_is_retryable(self) -> bool:
+        """Return whether the failed operation may be retried.
+
+        Returns:
+            bool: The retryability flag for this instance.
+        """
+        return self._is_retryable
 
     def get_detail(self) -> dict:
         """Provide structured details for the error.
@@ -413,10 +409,12 @@ class ErrorDefinition(metaclass=ErrorMeta):
             >>> custom = base.derive(code="CUSTOM_CODE")
         """
         new_instance = self.__class__(
-            message_template or self.message_template,
-            _code=code or self.code,
-            _http_status=http_status or self.http_status,
-            _is_retryable=self.is_retryable if is_retryable is None else is_retryable,
+            message_template or self.get_message_template(),
+            _code=code or self.get_code(),
+            _http_status=http_status or self.get_http_status(),
+            _is_retryable=self.get_is_retryable()
+            if is_retryable is None
+            else is_retryable,
             _detail=detail or self.detail,
             **(self.params if params is None else params),
         )
@@ -446,10 +444,10 @@ class ErrorDefinition(metaclass=ErrorMeta):
             }
         """
         return {
-            "code": self.code,
-            "http_status": self.http_status,
+            "code": self.get_code(),
+            "http_status": self.get_http_status(),
             "message": self.message,
-            "is_retryable": self.is_retryable,
+            "is_retryable": self.get_is_retryable(),
             "detail": self.detail,
         }
 
@@ -465,9 +463,9 @@ class ErrorDefinition(metaclass=ErrorMeta):
             otherwise, or ``NotImplemented`` for unsupported operand types.
         """
         if isinstance(other, str):
-            return self.code == other
+            return self.get_code() == other
         elif isinstance(other, ErrorDefinition):
-            return self.code == other.code
+            return self.get_code() == other.code
         return NotImplemented
 
     def __str__(self) -> str:
@@ -488,7 +486,7 @@ class ErrorDefinition(metaclass=ErrorMeta):
         params = ", ".join(f"{key}={value!r}" for key, value in self.params.items())
         return (
             f"{type(self).__name__}("
-            f"message_template={self.message_template!r}"
+            f"message_template={self.get_message_template()!r}"
             f"{', ' + params if params else ''}"
             f")"
         )
@@ -499,4 +497,4 @@ class ErrorDefinition(metaclass=ErrorMeta):
         Returns:
             int: Hash of the instance error code.
         """
-        return hash(self.code)
+        return hash(self.get_code())
