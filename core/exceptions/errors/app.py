@@ -322,7 +322,6 @@ class InvalidUsername(AppErrorDefinition):
         self.non_field_errors = kwds.get("non_field_errors", [])
         super().__init__(message_template, **kwds)
 
-    @property
     def get_detail(self) -> dict[str, dict[str, list[str]] | list[str]]:
         """Returns structured validation error details.
 
@@ -695,47 +694,6 @@ class ObjectNotFound(AppErrorDefinition):
 
     def __init__(self, message_template: str | None = None, /, **kwds):
         """Initializes an object not found error definition.
-
-        Passes all arguments to the parent class constructor.
-        """
-        super().__init__(message_template, **kwds)
-
-
-class InvalidValue(AppErrorDefinition):
-    """Error definition for invalid values in application operations.
-
-    This error occurs at the application level when a value doesn't meet the
-    expected requirements. This indicates a logical error in the application
-    where an invalid value is being processed.
-
-    Attributes:
-        code: "APP:INVALID_VALUE"
-        http_status: 500 Internal Server Error
-        message_template: "Invalid value: {value}."
-        is_retryable: False (requires valid value correction)
-
-    Example:
-        >>> # Wrap this definition in an application-specific exception
-        ... raise AppError(InvalidValue(value="invalid_data"))
-    """
-
-    code = "APP:INVALID_VALUE"
-    http_status = 500
-    message_template = _n("Invalid value: {value}.")
-    is_retryable = False
-
-    @overload
-    def __init__(
-        self,
-        message_template: str | None = None,
-        /,
-        *,
-        value: Any | None = None,
-        **kwds,
-    ) -> None: ...
-
-    def __init__(self, message_template: str | None = None, /, **kwds):
-        """Initializes an invalid value error definition.
 
         Passes all arguments to the parent class constructor.
         """
