@@ -12,9 +12,8 @@ from typing import Any
 
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions import AppError, ValidationError
-from core.exceptions.errors.app import InvalidValue
-from core.exceptions.errors.validation import InvalidUsername
+from core.exceptions import ValidationError
+from core.exceptions.errors.validation import InvalidUsername, InvalidValue
 from core.utils.user_identifier import collect_username_errors
 from core.validators.base import Validator
 
@@ -44,7 +43,7 @@ class UsernameValidator(Validator):
             the base class default.
 
     Raises:
-        AppError: If ``min_length`` is negative, or if ``max_length`` is
+        ValidationError: If ``min_length`` is negative, or if ``max_length`` is
             less than ``min_length``.
 
     Example:
@@ -72,13 +71,13 @@ class UsernameValidator(Validator):
                 used to build validation errors. Defaults to ``None``.
 
         Raises:
-            AppError: If ``min_length`` is negative, or if ``max_length``
+            ValidationError: If ``min_length`` is negative, or if ``max_length``
                 is less than ``min_length``.
         """
         if min_length < 0:
-            raise AppError(InvalidValue(_t("min_length must be non-negative.")))
+            raise ValidationError(InvalidValue(_t("min_length must be non-negative.")))
         if max_length < min_length:
-            raise AppError(
+            raise ValidationError(
                 InvalidValue(
                     _t("max_length must be greater than or equal to min_length.")
                 )
@@ -151,7 +150,7 @@ def validate_username(
             blank and ``allow_blank`` is ``True``.
 
     Raises:
-        AppError: If the validator configuration is invalid (for example,
+        ValidationError: If the validator configuration is invalid (for example,
             ``min_length`` is negative).
         DrfInputError: If the value fails validation.
     """

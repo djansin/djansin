@@ -232,7 +232,9 @@ def collect_username_errors(
     # Character validation
     if not re.match(r"^[a-z0-9_.-]+$", normalized_username):
         errors.append(
-            _t("Username can only contain lowercase letters (a-z), numbers, and . _ -")
+            _t(
+                "Username can only contain lowercase letters (a-z), numbers, and '.', '_', '-'."
+            )
         )
 
     if (
@@ -242,13 +244,13 @@ def collect_username_errors(
     ):
         errors.append(
             _t(
-                "Username cannot contain consecutive dots (..), hyphens (--), underscores (__)"
+                "Username cannot contain consecutive dots (..), hyphens (--), underscores (__)."
             )
         )
 
     # Start/end with dot validation
     if normalized_username.startswith(".") or normalized_username.endswith("."):
-        errors.append(_t("Username cannot start or end with a dot"))
+        errors.append(_t("Username cannot start or end with a dot (.)."))
 
     if normalized_username and (
         normalized_username.startswith("-") or normalized_username.endswith("-")

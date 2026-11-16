@@ -14,9 +14,8 @@ from typing import Any
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions import AppError, ValidationError
-from core.exceptions.errors.app import InvalidValue
-from core.exceptions.errors.validation import InvalidFormat
+from core.exceptions import ValidationError
+from core.exceptions.errors.validation import InvalidFormat, InvalidValue
 from core.utils.date_utils import compute_age
 from core.validators.base import Validator
 
@@ -46,7 +45,7 @@ class BirthDateValidator(Validator):
             base class default.
 
     Raises:
-        AppError: If ``min_age`` is negative, or if ``max_age`` is less
+        ValidationError: If ``min_age`` is negative, or if ``max_age`` is less
             than ``min_age``.
 
     Example:
@@ -78,13 +77,13 @@ class BirthDateValidator(Validator):
                 to build validation errors. Defaults to ``None``.
 
         Raises:
-            AppError: If ``min_age`` is negative, or if ``max_age`` is less
+            ValidationError: If ``min_age`` is negative, or if ``max_age`` is less
                 than ``min_age``.
         """
         if min_age < 0:
-            raise AppError(InvalidValue(_t("min_age must be non-negative.")))
+            raise ValidationError(InvalidValue(_t("min_age must be non-negative.")))
         if max_age < min_age:
-            raise AppError(
+            raise ValidationError(
                 InvalidValue(_t("max_age must be greater than or equal to min_age."))
             )
 
@@ -186,7 +185,7 @@ def validate_birth_date(
             blank and ``allow_blank`` is ``True``.
 
     Raises:
-        AppError: If the validator configuration is invalid (for example,
+        ValidationError: If the validator configuration is invalid (for example,
             ``min_age`` is negative).
         DrfInputError: If the value fails validation.
     """

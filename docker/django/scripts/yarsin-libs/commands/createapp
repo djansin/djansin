@@ -841,6 +841,7 @@ class ${capitalized_name}Config(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "${app_config_name}"
+    label = "${app_config_name}"
     verbose_name = "${capitalized_name} Application"
 EOF
 }
@@ -861,34 +862,32 @@ _generate_models_py() {
     local apps_dir="$3"
 
     local file_path
-    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/models.py"
+    file_path="$(_get_file_dir "${app_name}" "${root_dir}" "${apps_dir}")/models/__init__.py"
     local app_config_name
     app_config_name="$(_get_app_config_name "${app_name}" "${apps_dir}")"
     local capitalized_name
     capitalized_name="$(_to_capitalize "${app_name}")"
 
     cat > "$file_path" <<EOF
-"""Database Models for ${capitalized_name} App.
+"""Models package for the ${capitalized_name} application.
 
-This module defines the database schema using Django's ORM. Models represent
-the core data structures of your application and encapsulate business logic,
-validation rules, and relationships between data entities.
+Aggregates model classes from submodules within this package so consumers
+can import them directly from the package root (e.g.,
+\`from ${app_config_name}.models import MyModel\`) instead of referencing their
+defining submodules. Each model should live in its own submodule and be
+re-exported here via \`from .<module> import <ModelClass>\`.
 
-Model Design Guidelines:
-    - Each model maps to a single database table
-    - Field definitions determine column types and constraints
-    - Relationships (ForeignKey, ManyToMany) define data associations
-    - Meta class configures table behavior (ordering, permissions)
-    - __str__() provides human-readable representation
+Example:
+    To expose a \`User\` model defined in \`models/user.py\`, add::
 
-Note:
-    - Define all models before creating migrations
-    - Use appropriate field types and constraints
-    - Add docstrings to model classes for documentation
-    - Keep business logic in models when it relates to data
+        from .user import User
+
+Attributes:
+    __all__ (list[str]): Public model names exported by this package.
 """
 
-from django.db import models
+__all__: list[str] = []
+
 EOF
 }
 
