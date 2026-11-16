@@ -390,7 +390,6 @@ class InvalidUsername(ValidErrorDefinition):
         self.non_field_errors = kwds.get("non_field_errors", [])
         super().__init__(message_template, **kwds)
 
-    @property
     def get_detail(self) -> dict[str, dict[str, list[str]] | list[str]]:
         """Returns structured validation error details.
 
@@ -586,7 +585,7 @@ class Validation(ValidErrorDefinition):
         super().__init__(message_template, detail=detail, **kwds)
 
     @property
-    def details(self) -> dict[str, dict | list]:
+    def detail(self) -> dict[str, dict | list]:
         """Returns structured validation error details.
 
         Returns:
@@ -680,6 +679,137 @@ class InvalidTrustLevel(ValidErrorDefinition):
 
     def __init__(self, message_template: str | None = None, /, **kwds):
         """Initializes an invalid trust level error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
+
+
+class VerificationCodeStillValid(ValidErrorDefinition):
+    """Error definition for an existing, still-valid verification code.
+
+    Raised when a new verification code is requested for an identifier
+    that already has a non-expired code. No message is dispatched in
+    this case; the caller should either reuse the existing code window
+    or wait for expiry before requesting a new one.
+
+    Attributes:
+        code: VALID:VERIFICATION_CODE_STILL_VALID
+        http_status: 409 Conflict
+        message_template: "A valid verification code already exists for '{identifier}'."
+        is_retryable: True (retry after the current code expires)
+
+    Example:
+        >>> raise VerificationCodeStillValidError(identifier="user@example.com")
+    """
+
+    code = "VALID:VERIFICATION_CODE_STILL_VALID"
+    http_status = 409
+    message_template = _n(
+        "A valid verification code already exists for '{identifier}'."
+    )
+    is_retryable = True
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        identifier: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes a still-valid verification code error definition."""
+        super().__init__(message_template, **kwds)
+
+
+class InvalidValue(ValidErrorDefinition):
+    """Error definition for invalid values in application operations.
+
+    This error occurs at the application level when a value doesn't meet the
+    expected requirements. This indicates a logical error in the application
+    where an invalid value is being processed.
+
+    Attributes:
+        code: "VALID:INVALID_VALUE"
+        http_status: 500 Internal Server Error
+        message_template: "Invalid value: {value}."
+        is_retryable: False (requires valid value correction)
+
+    Example:
+        >>> # Wrap this definition in an application-specific exception
+        ... raise ValidationError(InvalidValue(value="invalid_data"))
+    """
+
+    code = "VALID:INVALID_VALUE"
+    http_status = 500
+    message_template = _n("Invalid value: {value}.")
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        value: Any | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes an invalid value error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
+
+
+class InvalidType(ValidErrorDefinition):
+    """Error definition for values of an unexpected type.
+
+    This error occurs when a value's runtime type does not match the
+    type required by the operation (e.g. passing a non-dataclass
+    instance to a helper that requires a dataclass).
+
+    Unlike user-facing validation failures, this signals a *programmer*
+    error: the caller violated the function's type contract, so the
+    input was never supposed to reach this code path. It is therefore
+    reported as a server-side (5xx) condition rather than a 4xx
+    client-correction response.
+
+    Attributes:
+        code: VALID:INVALID_TYPE
+        http_status: 500 Internal Server Error
+        message_template: "Expected type {expected_type}, got {actual_type}."
+        is_retryable: False (requires code fix, not retry)
+
+    Example:
+        >>> # Wrap this definition in a validation-specific exception
+        ... raise ValidationError(
+        ...     InvalidType(expected_type="dataclass", actual_type=type(obj).__name__)
+        ... )
+    """
+
+    code = "VALID:INVALID_TYPE"
+    http_status = 500
+    message_template = _n("Expected type {expected_type}, got {actual_type}.")
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        expected_type: str | None = None,
+        actual_type: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes an invalid type error definition.
 
         Passes all arguments to the parent class constructor.
         """
