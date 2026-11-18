@@ -12,7 +12,7 @@ elevation, lowering, and checking permissions based on trust thresholds.
 from django.db import models
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.categories import AppError, BusinessError
+from core.exceptions.categories import AppError
 from core.exceptions.errors.app import InvalidTrustLevel
 from core.exceptions.errors.business import (
     TrustLevelElevation,
@@ -150,10 +150,7 @@ class TrustableMixin(AbstractModelMixin):
             if name in {label, value}:
                 return value
         raise AppError(
-            _t("Invalid trust level name: '{name}'."),
-            name=name,
-            _code=InvalidTrustLevel.code,
-            _http_status=InvalidTrustLevel.http_status,
+            InvalidTrustLevel(_t("Invalid trust level name: '{name}'."), name=name)
         )
 
     # ========== Properties ==========
@@ -283,15 +280,15 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If already at maximum level or trying to elevate
-                to a level that is not higher than the current level.
-            AppError: If the provided trust level is invalid.
+            AppError: If the provided trust level is invalid, if already at
+                maximum level, or if trying to elevate to a level that is not
+                higher than the current level.
         """
         if new_level is None:
             # Elevate by one level
             current_index = list(self.TrustLevel.values).index(self.trust_level)
             if current_index >= len(self.TrustLevel.values) - 1:
-                raise BusinessError(TrustLevelElevationBeyondCore())
+                raise AppError(TrustLevelElevationBeyondCore())
             new_level = self.TrustLevel.values[current_index + 1]
         if new_level not in self.TrustLevel.values:
             raise AppError(
@@ -301,7 +298,7 @@ class TrustableMixin(AbstractModelMixin):
                 )
             )
         if new_level <= self.trust_level:
-            raise BusinessError(
+            raise AppError(
                 TrustLevelElevation(
                     new_level=new_level,
                     current_level=self.trust_level,
@@ -319,15 +316,15 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If already at minimum level or trying to lower
-                to a level that is not lower than the current level.
-            AppError: If the provided trust level is invalid.
+            AppError: If the provided trust level is invalid, if already at
+                minimum level, or if trying to lower to a level that is not
+                lower than the current level.
         """
         if new_level is None:
             # Lower by one level
             current_index = list(self.TrustLevel.values).index(self.trust_level)
             if current_index <= 0:
-                raise BusinessError(TrustLevelLoweringBelowUntrusted())
+                raise AppError(TrustLevelLoweringBelowUntrusted())
             new_level = self.TrustLevel.values[current_index - 1]
         if new_level not in self.TrustLevel.values:
             raise AppError(
@@ -337,7 +334,7 @@ class TrustableMixin(AbstractModelMixin):
                 )
             )
         if new_level >= self.trust_level:
-            raise BusinessError(
+            raise AppError(
                 TrustLevelLowering(
                     new_level=new_level,
                     current_level=self.trust_level,
@@ -361,7 +358,7 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If promotion is not allowed.
+            AppError: If promotion is not allowed.
         """
         self.elevate_trust(self.TrustLevel.REGULAR.value, save=save)
 
@@ -372,7 +369,7 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If promotion is not allowed.
+            AppError: If promotion is not allowed.
         """
         self.elevate_trust(self.TrustLevel.TRUSTED.value, save=save)
 
@@ -383,7 +380,7 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If promotion is not allowed.
+            AppError: If promotion is not allowed.
         """
         self.elevate_trust(self.TrustLevel.CORE.value, save=save)
 
@@ -394,7 +391,7 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If demotion is not allowed.
+            AppError: If demotion is not allowed.
         """
         self.lower_trust(self.TrustLevel.UNTRUSTED.value, save=save)
 
@@ -405,7 +402,7 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If demotion is not allowed.
+            AppError: If demotion is not allowed.
         """
         self.lower_trust(self.TrustLevel.REGULAR.value, save=save)
 
@@ -416,7 +413,7 @@ class TrustableMixin(AbstractModelMixin):
             save: If True, saves the changes immediately. Defaults to True.
 
         Raises:
-            BusinessError: If demotion is not allowed.
+            AppError: If demotion is not allowed.
         """
         self.lower_trust(self.TrustLevel.TRUSTED.value, save=save)
 

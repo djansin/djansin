@@ -16,7 +16,7 @@ Key distinction:
     - Exception classes = "WHEN the application error happens" (raised in code flow)
 """
 
-from typing import Any, overload
+from typing import overload
 
 from django.utils.translation import gettext_noop as _n
 
@@ -622,7 +622,7 @@ class DuplicateObject(AppErrorDefinition):
 
     Attributes:
         code: "APP:DUPLICATE_OBJECT"
-        http_status: 409 Conflict
+        http_status: 500 Internal Server Error
         message_template: "{object} with this {att_name} already exists."
         is_retryable: False (duplicate won't resolve by retrying)
 
@@ -635,7 +635,7 @@ class DuplicateObject(AppErrorDefinition):
     """
 
     code = "APP:DUPLICATE_OBJECT"
-    http_status = 409
+    http_status = 500
     message_template = _n("{object} with this {att_name} already exists.")
     is_retryable = False
 
@@ -668,7 +668,7 @@ class ObjectNotFound(AppErrorDefinition):
 
     Attributes:
         code: "APP:OBJECT_NOT_FOUND"
-        http_status: 404 Not Found
+        http_status: 500 Internal Server Error
         message_template: "{object} not found."
         is_retryable: False (object doesn't exist)
 
@@ -678,7 +678,7 @@ class ObjectNotFound(AppErrorDefinition):
     """
 
     code = "APP:OBJECT_NOT_FOUND"
-    http_status = 404
+    http_status = 500
     message_template = _n("{object} not found.")
     is_retryable = False
 
@@ -739,6 +739,325 @@ class AttributeNotFound(AppErrorDefinition):
 
     def __init__(self, message_template: str | None = None, /, **kwds):
         """Initializes an attribute not found error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
+
+
+class ResourceAlreadyBlocked(AppErrorDefinition):
+    """Error definition for attempting to block an already blocked resource.
+
+    This error occurs when an operation tries to block a resource that is
+    already in a blocked state.
+
+    Attributes:
+        code: "APP:RESOURCE_ALREADY_BLOCKED"
+        http_status: 500 Internal Server Error
+        message_template: "The resource is already blocked."
+        is_retryable: False
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(ResourceAlreadyBlocked())
+    """
+
+    code = "APP:RESOURCE_ALREADY_BLOCKED"
+    http_status = 500
+    message_template = _n("The resource is already blocked.")
+    is_retryable = False
+
+
+class ResourceAlreadyUnblocked(AppErrorDefinition):
+    """Error definition for attempting to unblock an already unblocked resource.
+
+    This error occurs when an operation tries to unblock a resource that is
+    already in an unblocked state.
+
+    Attributes:
+        code: "APP:RESOURCE_ALREADY_UNBLOCKED"
+        http_status: 500 Internal Server Error
+        message_template: "The resource is already unblocked."
+        is_retryable: False
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(ResourceAlreadyUnblocked())
+    """
+
+    code = "APP:RESOURCE_ALREADY_UNBLOCKED"
+    http_status = 500
+    message_template = _n("The resource is already unblocked.")
+    is_retryable = False
+
+
+class ResourceNotSaved(AppErrorDefinition):
+    """Error definition for operations on unsaved resources.
+
+    This error occurs when attempting to perform operations like updating,
+    deleting, or blocking on a resource instance that hasn't been persisted
+    to the database yet.
+
+    Attributes:
+        code: "APP:RESOURCE_NOT_SAVED"
+        http_status: 500 Internal Server Error
+        message_template: "Cannot perform operation on unsaved resource."
+        is_retryable: False
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(ResourceNotSaved())
+    """
+
+    code = "APP:RESOURCE_NOT_SAVED"
+    http_status = 500
+    message_template = _n("Cannot perform operation on unsaved resource.")
+    is_retryable = False
+
+
+class ResourceAlreadyConfirmed(AppErrorDefinition):
+    """Error definition for attempting to confirm an already confirmed resource.
+
+    This error occurs when an operation tries to confirm a resource that is
+    already in a confirmed state. Confirmation operations should only be
+    performed on unconfirmed resources.
+
+    Attributes:
+        code: "APP:RESOURCE_ALREADY_CONFIRMED"
+        http_status: 500 Internal Server Error
+        message_template: "The resource is already confirmed."
+        is_retryable: False (resource state cannot be changed)
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(ResourceAlreadyConfirmed())
+    """
+
+    code = "APP:RESOURCE_ALREADY_CONFIRMED"
+    http_status = 500
+    message_template = _n("The resource is already confirmed.")
+    is_retryable = False
+
+
+class ResourceNotConfirmed(AppErrorDefinition):
+    """Error definition for operations on unconfirmed resources.
+
+    This error occurs when attempting to perform operations that require
+    a confirmed resource but the resource is not yet confirmed.
+
+    Attributes:
+        code: "APP:RESOURCE_NOT_CONFIRMED"
+        http_status: 500 Internal Server Error
+        message_template: "The resource is not confirmed."
+        is_retryable: False (requires confirmation)
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(ResourceNotConfirmed())
+    """
+
+    code = "APP:RESOURCE_NOT_CONFIRMED"
+    http_status = 500
+    message_template = _n("The resource is not confirmed.")
+    is_retryable = False
+
+
+class ObjectAlreadyDeleted(AppErrorDefinition):
+    """Error definition for attempting to delete an already deleted object.
+
+    This error occurs when the delete() method is called on an object
+    that is already soft-deleted.
+
+    Attributes:
+        code: "APP:OBJECT_ALREADY_DELETED"
+        http_status: 500 Internal Server Error
+        message_template: "Cannot delete {model_name} with ID {object_id}: object is already deleted."
+        is_retryable: False
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(ObjectAlreadyDeleted(
+        ...     model_name="Comment",
+        ...     object_id=99
+        ... ))
+    """
+
+    code = "APP:OBJECT_ALREADY_DELETED"
+    http_status = 500
+    message_template = _n(
+        "Cannot delete {model_name} with ID {object_id}: object is already deleted."
+    )
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        model_name: str | None = None,
+        object_id: str | int | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes an object already deleted error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
+
+
+class UndeleteActiveObject(AppErrorDefinition):
+    """Error definition for attempting to restore a non-deleted object.
+
+    This error occurs when the undelete() method is called on an object
+    that is not currently soft-deleted. The operation is only allowed
+    on objects that have been previously soft-deleted.
+
+    Attributes:
+        code: "APP:UNDELETE_ACTIVE_OBJECT"
+        http_status: 500 Internal Server Error
+        message_template: "Cannot restore {model_name} with ID {object_id}: undelete operation not allowed on active objects."
+        is_retryable: False
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(UndeleteActiveObject(
+        ...     model_name="Post",
+        ...     object_id=42
+        ... ))
+    """
+
+    code = "APP:UNDELETE_ACTIVE_OBJECT"
+    http_status = 500
+    message_template = _n(
+        "Cannot restore {model_name} with ID {object_id}: undelete operation not allowed on active objects."
+    )
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        model_name: str | None = None,
+        object_id: str | int | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes an undelete active object error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
+
+
+class InvalidStateForVerification(AppErrorDefinition):
+    """Error definition for invalid state transitions during verification.
+
+    This error occurs when attempting to verify a record but the requested
+    state transition is not allowed from the current state. This ensures
+    that verification workflows follow the proper state machine rules.
+
+    Attributes:
+        code: "APP:INVALID_STATE_FOR_VERIFICATION"
+        http_status: 500 InvalidStateForVerification
+        message_template: "Cannot verify record: transition to '{next_state}' is not allowed from current state."
+        is_retryable: False (requires correct state flow)
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(InvalidStateForVerification(
+        ...     next_state="Active"
+        ... ))
+    """
+
+    code = "APP:INVALID_STATE_FOR_VERIFICATION"
+    http_status = 500
+    message_template = _n(
+        "Cannot verify record: transition to '{next_state}' is not allowed from current state."
+    )
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        next_state: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes an invalid state for verification error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
+
+
+class RecordAlreadyVerified(AppErrorDefinition):
+    """Error definition for attempting to verify an already verified record.
+
+    This error occurs when an operation tries to verify a record that is
+    already in a verified state. Verification operations should only be
+    performed on unverified records.
+
+    Attributes:
+        code: "APP:RECORD_ALREADY_VERIFIED"
+        http_status: 500 Internal Server Error
+        message_template: "Record is already verified."
+        is_retryable: False (record state cannot be changed)
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(RecordAlreadyVerified())
+    """
+
+    code = "APP:RECORD_ALREADY_VERIFIED"
+    http_status = 500
+    message_template = _n("Record is already verified.")
+    is_retryable = False
+
+
+class OperationNotAllowed(AppErrorDefinition):
+    """Error definition for invalid state transitions.
+
+    This error occurs when an operation is attempted but the current state of
+    the system or resource does not permit it.
+
+    Attributes:
+        code: "APP:OPERATION_NOT_ALLOWED"
+        http_status: 500 Internal Server Error
+        message_template: "Operation not allowed. {reason}"
+        is_retryable: False (operation not allowed in this state)
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(OperationNotAllowed(reason="Account is inactive"))
+    """
+
+    code = "APP:OPERATION_NOT_ALLOWED"
+    http_status = 500
+    message_template = _n("Operation not allowed. {reason}")
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        reason: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes an operation not allowed error definition.
 
         Passes all arguments to the parent class constructor.
         """

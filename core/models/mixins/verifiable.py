@@ -9,8 +9,8 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.categories import BusinessError
-from core.exceptions.errors.business import (
+from core.exceptions.categories import AppError
+from core.exceptions.errors.app import (
     InvalidStateForVerification,
     RecordAlreadyVerified,
 )
@@ -257,10 +257,10 @@ class VerifiableMixin(AbstractModelMixin):
         and recording the verification timestamp.
 
         Raises:
-            BusinessError: If the record is already active or cannot be verified.
+            AppError: If the record is already active or cannot be verified.
         """
         if self.is_active:
-            raise BusinessError(RecordAlreadyVerified())
+            raise AppError(RecordAlreadyVerified())
 
         updated_count = (
             self.__class__.objects.model._base_manager.filter(pk=self.pk)
@@ -272,7 +272,7 @@ class VerifiableMixin(AbstractModelMixin):
         )
 
         if updated_count == 0:
-            raise BusinessError(InvalidStateForVerification(next_state=_t("ACTIVE")))
+            raise AppError(InvalidStateForVerification(next_state=_t("ACTIVE")))
 
     def reassign(self) -> None:
         """Reassign the verification, transitioning from PENDING to REASSIGNED.
@@ -281,10 +281,10 @@ class VerifiableMixin(AbstractModelMixin):
         and recording the verification timestamp.
 
         Raises:
-            BusinessError: If the record is already active or cannot be reassigned.
+            AppError: If the record is already active or cannot be reassigned.
         """
         if self.is_active:
-            raise BusinessError(RecordAlreadyVerified())
+            raise AppError(RecordAlreadyVerified())
 
         updated_count = (
             self.__class__.objects.model._base_manager.filter(pk=self.pk)
@@ -296,9 +296,7 @@ class VerifiableMixin(AbstractModelMixin):
         )
 
         if updated_count == 0:
-            raise BusinessError(
-                InvalidStateForVerification(next_state=_t("REASSIGNED"))
-            )
+            raise AppError(InvalidStateForVerification(next_state=_t("REASSIGNED")))
 
     def reinstate(self) -> None:
         """Reinstate the verification, transitioning from PENDING to REINSTATED.
@@ -307,10 +305,10 @@ class VerifiableMixin(AbstractModelMixin):
         and recording the verification timestamp.
 
         Raises:
-            BusinessError: If the record is already active or cannot be reinstated.
+            AppError: If the record is already active or cannot be reinstated.
         """
         if self.is_active:
-            raise BusinessError(RecordAlreadyVerified())
+            raise AppError(RecordAlreadyVerified())
 
         updated_count = (
             self.__class__.objects.model._base_manager.filter(pk=self.pk)
@@ -322,9 +320,7 @@ class VerifiableMixin(AbstractModelMixin):
         )
 
         if updated_count == 0:
-            raise BusinessError(
-                InvalidStateForVerification(next_state=_t("REINSTATED"))
-            )
+            raise AppError(InvalidStateForVerification(next_state=_t("REINSTATED")))
 
     def revoke(self) -> None:
         """Revoke the verification.
@@ -334,10 +330,10 @@ class VerifiableMixin(AbstractModelMixin):
         already revoked.
 
         Raises:
-            BusinessError: If the record is pending or already revoked.
+            AppError: If the record is pending or already revoked.
         """
         if self.is_active:
-            raise BusinessError(RecordAlreadyVerified())
+            raise AppError(RecordAlreadyVerified())
 
         updated_count = (
             self.__class__.objects.model._base_manager.filter(pk=self.pk)
@@ -350,7 +346,7 @@ class VerifiableMixin(AbstractModelMixin):
         )
 
         if updated_count == 0:
-            raise BusinessError(InvalidStateForVerification(next_state=_t("REVOKE")))
+            raise AppError(InvalidStateForVerification(next_state=_t("REVOKE")))
 
     # ========== Validation Methods ==========
 

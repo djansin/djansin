@@ -685,46 +685,6 @@ class InvalidTrustLevel(ValidErrorDefinition):
         super().__init__(message_template, **kwds)
 
 
-class VerificationCodeStillValid(ValidErrorDefinition):
-    """Error definition for an existing, still-valid verification code.
-
-    Raised when a new verification code is requested for an identifier
-    that already has a non-expired code. No message is dispatched in
-    this case; the caller should either reuse the existing code window
-    or wait for expiry before requesting a new one.
-
-    Attributes:
-        code: VALID:VERIFICATION_CODE_STILL_VALID
-        http_status: 409 Conflict
-        message_template: "A valid verification code already exists for '{identifier}'."
-        is_retryable: True (retry after the current code expires)
-
-    Example:
-        >>> raise VerificationCodeStillValidError(identifier="user@example.com")
-    """
-
-    code = "VALID:VERIFICATION_CODE_STILL_VALID"
-    http_status = 409
-    message_template = _n(
-        "A valid verification code already exists for '{identifier}'."
-    )
-    is_retryable = True
-
-    @overload
-    def __init__(
-        self,
-        message_template: str | None = None,
-        /,
-        *,
-        identifier: str | None = None,
-        **kwds,
-    ) -> None: ...
-
-    def __init__(self, message_template: str | None = None, /, **kwds):
-        """Initializes a still-valid verification code error definition."""
-        super().__init__(message_template, **kwds)
-
-
 class InvalidValue(ValidErrorDefinition):
     """Error definition for invalid values in application operations.
 

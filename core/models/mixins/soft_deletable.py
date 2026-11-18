@@ -17,8 +17,8 @@ from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.categories import BusinessError
-from core.exceptions.errors.business import (
+from core.exceptions.categories import AppError
+from core.exceptions.errors.app import (
     ObjectAlreadyDeleted,
     ResourceNotSaved,
     UndeleteActiveObject,
@@ -136,12 +136,12 @@ class SoftDeletableModelMixin(AbstractModelMixin):
                 - A dictionary mapping model labels to deletion counts
 
         Raises:
-            BusinessError: If the instance is not saved (no primary key)
+            AppError: If the instance is not saved (no primary key)
                 or is already soft-deleted.
         """
         # Returns (0, {}) for unsaved instances to match Django's native delete() behavior.
         if self.pk is None:
-            raise BusinessError(ResourceNotSaved())
+            raise AppError(ResourceNotSaved())
 
         now = timezone.now()
         total_count = self.__class__.objects.model._base_manager.filter(
@@ -149,7 +149,7 @@ class SoftDeletableModelMixin(AbstractModelMixin):
         ).update(deleted_at=now, updated_at=now)
 
         if total_count == 0:
-            raise BusinessError(
+            raise AppError(
                 ObjectAlreadyDeleted(
                     model_name=_t("resource"), object_id=str(self.uuid)
                 )
@@ -189,19 +189,19 @@ class SoftDeletableModelMixin(AbstractModelMixin):
                 - A dictionary mapping model labels to restoration counts
 
         Raises:
-            BusinessError: If the instance is not saved (no primary key)
+            AppError: If the instance is not saved (no primary key)
                 or is not currently soft-deleted.
         """
         # Returns (0, {}) for unsaved instances to match Django's native delete() behavior.
         if self.pk is None:
-            raise BusinessError(ResourceNotSaved())
+            raise AppError(ResourceNotSaved())
 
         total_count = self.__class__.objects.model._base_manager.filter(
             pk=self.pk, deleted_at__isnull=False
         ).update(deleted_at=None, updated_at=timezone.now())
 
         if total_count == 0:
-            raise BusinessError(
+            raise AppError(
                 UndeleteActiveObject(model_name=_t("object"), object_id=str(self.uuid))
             )
 

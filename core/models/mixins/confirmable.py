@@ -17,8 +17,8 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.categories import BusinessError
-from core.exceptions.errors.business import (
+from core.exceptions.categories import AppError
+from core.exceptions.errors.app import (
     ResourceAlreadyConfirmed,
     ResourceNotConfirmed,
     ResourceNotSaved,
@@ -148,11 +148,11 @@ class ConfirmableMixin(AbstractModelMixin):
         idempotency and preventing re-confirmation.
 
         Raises:
-            BusinessError: If the record is not saved (no primary key) or
+            AppError: If the record is not saved (no primary key) or
                 is already confirmed.
         """
         if self.pk is None:
-            raise BusinessError(ResourceNotSaved())
+            raise AppError(ResourceNotSaved())
 
         now = timezone.now()
         total_count = self.__class__.objects.model._base_manager.filter(
@@ -160,7 +160,7 @@ class ConfirmableMixin(AbstractModelMixin):
         ).update(confirmed_at=now, last_confirmed_at=now)
 
         if total_count == 0:
-            raise BusinessError(ResourceAlreadyConfirmed())
+            raise AppError(ResourceAlreadyConfirmed())
 
     def update_interaction(self) -> None:
         """Update the last interaction timestamp.
@@ -172,11 +172,11 @@ class ConfirmableMixin(AbstractModelMixin):
         interaction tracking is only maintained for verified records.
 
         Raises:
-            BusinessError: If the record is not saved (no primary key) or
+            AppError: If the record is not saved (no primary key) or
                 is not yet confirmed.
         """
         if self.pk is None:
-            raise BusinessError(ResourceNotSaved())
+            raise AppError(ResourceNotSaved())
 
         total_count = self.__class__.objects.model._base_manager.filter(
             pk=self.pk, confirmed_at__isnull=False
@@ -185,4 +185,4 @@ class ConfirmableMixin(AbstractModelMixin):
         )
 
         if total_count == 0:
-            raise BusinessError(ResourceNotConfirmed())
+            raise AppError(ResourceNotConfirmed())

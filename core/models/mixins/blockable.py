@@ -15,8 +15,8 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
-from core.exceptions.categories import BusinessError
-from core.exceptions.errors.business import (
+from core.exceptions.categories import AppError
+from core.exceptions.errors.app import (
     ResourceAlreadyBlocked,
     ResourceAlreadyUnblocked,
     ResourceNotSaved,
@@ -98,11 +98,11 @@ class BlockableMixin(AbstractModelMixin):
                 Defaults to 30 minutes.
 
         Raises:
-            BusinessError: If the record is not saved (no primary key) or
+            AppError: If the record is not saved (no primary key) or
                 is already blocked.
         """
         if self.pk is None:
-            raise BusinessError(ResourceNotSaved())
+            raise AppError(ResourceNotSaved())
 
         blocked_until = timezone.now() + timezone.timedelta(minutes=duration_minutes)
         updated_count = (
@@ -114,7 +114,7 @@ class BlockableMixin(AbstractModelMixin):
         )
 
         if updated_count == 0:
-            raise BusinessError(ResourceAlreadyBlocked())
+            raise AppError(ResourceAlreadyBlocked())
 
     def unblock(self) -> None:
         """Unblock the record.
@@ -124,11 +124,11 @@ class BlockableMixin(AbstractModelMixin):
         blocked, preventing unnecessary operations on already unblocked records.
 
         Raises:
-            BusinessError: If the record is not saved (no primary key) or
+            AppError: If the record is not saved (no primary key) or
                 is not currently blocked.
         """
         if self.pk is None:
-            raise BusinessError(ResourceNotSaved())
+            raise AppError(ResourceNotSaved())
 
         updated_count = (
             self.__class__.objects.model._base_manager.filter(pk=self.pk)
@@ -137,4 +137,4 @@ class BlockableMixin(AbstractModelMixin):
         )
 
         if updated_count == 0:
-            raise BusinessError(ResourceAlreadyUnblocked())
+            raise AppError(ResourceAlreadyUnblocked())
