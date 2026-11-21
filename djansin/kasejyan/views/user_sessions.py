@@ -31,8 +31,7 @@ class ListUserSessionsView(APIView):
             An enveloped ``200 OK`` response containing the list of
             active sessions.
         """
-        service = ListUserSessionsService()
-        sessions = service(identifier=request.user.username)
+        sessions = ListUserSessionsService()(identifier=request.user.username)
         return self.build_response(
             message=_t("Active sessions retrieved successfully."),
             code="AUTH_SESSIONS_LISTED",

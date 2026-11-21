@@ -10,8 +10,6 @@ from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
 from rest_framework import status
 
-from core.exceptions.categories import BusinessError
-from core.exceptions.errors.business import BusinessRuleViolation
 from core.permissions.auth_based import AllowAny
 from core.views import APIView, Response
 from djansin.kasejyan.serializers.refresh_token import RefreshTokenSerializer

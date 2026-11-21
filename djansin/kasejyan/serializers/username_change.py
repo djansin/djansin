@@ -1,7 +1,7 @@
-"""Serializer definitions for the username-change flow.
+"""Serializer for the username-change flow.
 
-This module exposes :class:`ChangeUsernameSerializer`, a DRF serializer
-that validates the payload used by the username-change view. The payload
+Exposes :class:`ChangeUsernameSerializer`, a DRF serializer that
+validates the payload used by the username-change view. The payload
 must contain a single ``new_username`` that satisfies the project's
 identifier format rules.
 """
@@ -61,7 +61,8 @@ class ChangeUsernameSerializer(Serializer):
         collected per-rule errors.
 
         Args:
-            new_username (str): The raw new username provided by the client.
+            new_username (str): The raw new username provided by the
+                client.
 
         Returns:
             str: The validated new username, unchanged.
@@ -72,8 +73,6 @@ class ChangeUsernameSerializer(Serializer):
         """
         if not is_valid_username(username=new_username):
             errs = collect_username_errors(new_username)
-            raise self.raise_input_error(
-                InvalidUsername("\n".join(f"{e}" for e in errs))
-            )
+            raise self.raise_input_error(InvalidUsername(field_errors=errs))
 
         return new_username

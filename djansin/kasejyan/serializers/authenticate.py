@@ -1,10 +1,10 @@
 """Serializer definitions for the authentication sign-in/sign-up flow.
 
-This module exposes :class:`AuthenticateSerializer`, a DRF serializer that
-validates the payload used by the authentication view to either log in an
-existing user or register a new one. The payload must contain an
-``identifier`` together with exactly one of: a password (plus matching
-confirmation) or a one-time verification code.
+Exposes :class:`AuthenticateSerializer`, a DRF serializer that validates
+the payload used by the authentication view to either log in an existing
+user or register a new one. The payload must contain an ``identifier``
+together with exactly one of: a password (plus matching confirmation) or
+a one-time verification code.
 """
 
 from django.utils.translation import gettext_lazy as _t
@@ -23,21 +23,30 @@ from core.utils.user_identifier import (
 class AuthenticateSerializer(Serializer):
     """Serializer validating credentials for authentication or registration.
 
-    Accepts a single ``identifier`` (email, phone number, or username) and
-    exactly one credential path: either a ``password`` with a matching
-    ``password_confirm``, or a six-digit ``code`` for contact-based
-    verification. Field-level and object-level validation enforce format,
-    length, and mutual-exclusivity constraints.
+    Accepts a single ``identifier`` (email, phone number, or username)
+    and exactly one credential path: either a ``password`` with a
+    matching ``password_confirm``, or a six-digit ``code`` for
+    contact-based verification.
+
+    Field-level validation enforces presence, length, and format.
+    Object-level validation enforces mutual exclusivity (password XOR
+    code), password confirmation matching, and — when using the code
+    path — that the identifier is a contact (email or phone), not a
+    username.
 
     Attributes:
-        identifier (serializers.CharField): Write-only identifier supplied
-            by the client. Length must be between 5 and 255 characters.
-        password (serializers.CharField | None): Write-only password, when
-            using the password-based path. Minimum length is 8 characters.
+        identifier (serializers.CharField): Write-only identifier
+            supplied by the client. Length must be between 5 and 255
+            characters.
+        password (serializers.CharField | None): Write-only password,
+            when using the password-based path. Minimum length is 8
+            characters. Optional; defaults to ``None``.
         password_confirm (serializers.CharField | None): Write-only
-            confirmation matching ``password``.
+            confirmation matching ``password``. Optional; defaults to
+            ``None``.
         code (serializers.CharField | None): Write-only six-digit
-            verification code, when using the code-based path.
+            verification code, when using the code-based path. Optional;
+            defaults to ``None``.
     """
 
     identifier = serializers.CharField(
@@ -98,8 +107,8 @@ class AuthenticateSerializer(Serializer):
 
         Ensures the value satisfies the general identifier format rules
         (lowercase letters, digits, and ``.``, ``_``, ``-``) and, on
-        failure, raises a :class:`UsernameValidationError` populated with
-        the collected per-rule errors.
+        failure, raises an :class:`InvalidUsername` populated with the
+        collected per-rule errors.
 
         Args:
             identifier (str): The raw identifier provided by the client.
@@ -108,7 +117,8 @@ class AuthenticateSerializer(Serializer):
             str: The validated identifier, unchanged.
 
         Raises:
-            InputError: If the identifier does not conform to the expected format.
+            InputError: If the identifier does not conform to the
+                expected format.
         """
         if not is_valid_identifier(identifier=identifier):
             errors = collect_username_errors(identifier)
@@ -120,12 +130,14 @@ class AuthenticateSerializer(Serializer):
         """Perform object-level validation across the serializer fields.
 
         Enforces the following invariants:
-            * Exactly one credential path is provided: either ``password``
-              or ``code``, but not both.
-            * When ``password`` is provided, ``password_confirm`` must be
-              present and match it.
-            * The ``identifier`` must resolve to a valid email address,
-              phone number, or username.
+
+        * Exactly one credential path is provided: either ``password``
+          or ``code``, but not both.
+        * When ``password`` is provided, ``password_confirm`` must be
+          present and match it.
+        * When ``code`` is provided, the ``identifier`` must resolve to
+          a valid email address or phone number (not a username), since
+          verification codes are only dispatched to contacts.
 
         Args:
             data (dict): The validated field data collected by DRF.

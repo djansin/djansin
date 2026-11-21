@@ -1,9 +1,16 @@
-"""Request a verification code to change the user's email address.
+"""Views for the email-change flow.
 
-Verifies the new email is not already owned, then dispatches a
-one-time code to it. First step of the two-step email-change flow;
-the second step is handled by :class:`ChangeEmailView`. Requires
-authentication.
+Exposes two endpoints:
+
+* :class:`RequestChangeEmailView` — dispatches a verification code to
+  the new email. The request step does not disclose whether the email
+  exists, is already owned, or is blocked: a generic success-shaped
+  response is returned in all cases.
+* :class:`ChangeEmailView` — verifies the code and swaps the user's
+  current email for the new one.
+
+Both require authentication; the caller must be signed in to change
+their email.
 """
 
 from django.http import HttpRequest
@@ -21,7 +28,13 @@ from djansin.kasejyan.services.email_change_request import RequestChangeEmailSer
 
 
 class ChangeEmailView(APIView):
-    """Change the authenticated user's email address."""
+    """Change the authenticated user's email address.
+
+    Verifies the one-time code sent to the new email, then swaps the
+    user's current email for the new one. A blocked email is rejected
+    explicitly (after the code is verified); an email owned by another
+    account is also rejected explicitly (after the code is verified).
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -41,9 +54,12 @@ class ChangeEmailView(APIView):
         Raises:
             ValidationError: When the payload is invalid. Raised by the
                 serializer via ``raise_exception=True``.
-            BusinessError: When the code is invalid or expired, or the
-                new email is already owned by another user. Raised by
-                the service layer.
+            DomainError: When the email has no pending change, or the
+                code is invalid/expired/issued for a different purpose.
+                Raised by the service layer.
+            BusinessError: When the email is temporarily blocked or is
+                already owned by another user. Raised by the service
+                layer.
         """
         serializer = ChangeEmailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -63,7 +79,14 @@ class ChangeEmailView(APIView):
 
 
 class RequestChangeEmailView(APIView):
-    """Request a verification code to change the user's email address."""
+    """Request a verification code to change the user's email address.
+
+    Verifies that the new email is syntactically valid, then dispatches
+    a one-time code to it. Ownership and block state are not disclosed
+    at this step: a generic success-shaped response is returned in all
+    cases, so the endpoint cannot be used to enumerate emails or probe
+    ownership/block state.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -78,14 +101,14 @@ class RequestChangeEmailView(APIView):
 
         Returns:
             An enveloped ``200 OK`` response containing the destination
-            email and the code's expiry.
+            email and the code's expiry. When the email is blocked, the
+            response is indistinguishable from the success case.
 
         Raises:
             ValidationError: When the payload is invalid. Raised by the
                 serializer via ``raise_exception=True``.
-            BusinessError: When the email is invalid, already linked to
-                the user, already taken by another user, or still has a
-                valid code. Raised by the service layer.
+            BusinessError: When a still-valid code is already
+                outstanding for this email. Raised by the service layer.
         """
         serializer = RequestChangeEmailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

@@ -9,9 +9,10 @@ dedicated query entry point for
 """
 
 from core.models.managers.querysets import BaseQuerySet
+from core.models.managers.querysets.mixins import BlockableQuerySetMixin
 
 
-class PhoneQuerySet(BaseQuerySet):
+class PhoneQuerySet(BlockableQuerySetMixin, BaseQuerySet):
     """QuerySet for the :class:`~djansin.kasejyan.models.Phone` model.
 
     Inherits all filtering and chaining helpers from

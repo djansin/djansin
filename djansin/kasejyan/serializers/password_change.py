@@ -1,7 +1,7 @@
-"""Serializer definitions for the password-change flow.
+"""Serializers for the password-change flow.
 
-This module exposes :class:`ChangePasswordSerializer`, a DRF serializer
-that validates the payload used by the password-change view. The payload
+Exposes :class:`ChangePasswordSerializer`, a DRF serializer that
+validates the payload used by the password-change view. The payload
 must contain the current password, the new password, and a matching
 confirmation of the new password.
 """
@@ -17,12 +17,13 @@ class ChangePasswordSerializer(Serializer):
     """Serializer validating the payload for changing a user's password.
 
     Accepts the current password (for re-authentication), the new
-    password, and a matching confirmation of the new password. Field-level
-    validation enforces presence and minimum length; object-level
-    validation ensures the confirmation matches. Deeper password policy
-    checks (similarity to user attributes, common-password lists, etc.)
-    are delegated to the service layer, where the user instance is
-    available.
+    password, and a matching confirmation of the new password.
+
+    Field-level validation enforces presence and minimum length.
+    Object-level validation ensures the confirmation matches and the new
+    password differs from the current one. Deeper password policy checks
+    (similarity to user attributes, common-password lists, etc.) are
+    delegated to the service layer, where the user instance is available.
 
     Attributes:
         current_password (serializers.CharField): Write-only current
@@ -80,8 +81,9 @@ class ChangePasswordSerializer(Serializer):
         """Perform object-level validation across the serializer fields.
 
         Enforces the following invariants:
-            * ``new_password`` and ``new_password_confirm`` must match.
-            * ``new_password`` must differ from ``current_password``.
+
+        * ``new_password`` and ``new_password_confirm`` must match.
+        * ``new_password`` must differ from ``current_password``.
 
         Args:
             data (dict): The validated field data collected by DRF.
@@ -90,7 +92,7 @@ class ChangePasswordSerializer(Serializer):
             dict: The same ``data`` mapping, after all checks pass.
 
         Raises:
-            InputError: If any of the invariants above is violated.
+            InputError: If any of the invariants above are violated.
         """
         current_password = data.get("current_password")
         new_password = data.get("new_password")

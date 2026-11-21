@@ -1,10 +1,11 @@
-"""Typed result object for issued authentication tokens.
+"""Typed result objects for service-layer returns.
 
-This module defines :class:`IssueTokenResult`, a lightweight dataclass
-that bundles an authenticated user with the refresh token issued for that
-user. It provides a serialization helper that renders the token pair,
-expiration metadata, and the public user representation into a plain
-dictionary suitable for API responses.
+This module defines lightweight dataclasses that bundle service outputs
+into immutable, serializable value objects. Each dataclass inherits
+:class:`~core.types.mixins.ToDictMixin`, which renders the instance as a
+plain dictionary, delegating per-field formatting to ``get_<field>``
+methods when present (e.g. to convert ``datetime`` values to ISO 8601
+strings).
 """
 
 from dataclasses import dataclass
@@ -77,8 +78,8 @@ class IssueTokenResult(Result):
             "token_type": self.token_type,
             "refresh": str(self.refresh),
             "access": str(access_token),
-            "access_expires_at": access_expires_at,
-            "refresh_expires_at": refresh_expires_at,
+            "access_expires_at": access_expires_at.isoformat(),
+            "refresh_expires_at": refresh_expires_at.isoformat(),
             "access_expires_in": access_expires_in,
             "refresh_expires_in": refresh_expires_in,
             "user": UserSerializer(self.user).data,
@@ -87,12 +88,16 @@ class IssueTokenResult(Result):
 
 @dataclass(frozen=True, slots=True)
 class CodeDispatchResult(Result):
+    """Outcome of dispatching a verification code."""
+
     type: str
     identifier: str
 
 
 @dataclass(frozen=True, slots=True)
 class RegisteredUser(Result):
+    """Public representation of a registered or authenticated user."""
+
     pk: int
     uuid: str
     username: str
@@ -102,6 +107,9 @@ class RegisteredUser(Result):
     is_staff: bool
     is_superuser: bool
     date_joined: datetime
+
+    def get_date_joined(self, value: datetime) -> str:
+        return value.isoformat()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,29 +133,29 @@ class RevokedSessionResult(Result):
     expires_at: datetime | None
     revoked_at: datetime
 
-    def get_created_at(self, value: datetime) -> datetime:
-        return value.isoformat()
+    def get_created_at(self, value: datetime | None) -> str | None:
+        return value.isoformat() if value is not None else None
 
-    def get_expires_at(self, value: datetime) -> datetime:
-        return value.isoformat()
+    def get_expires_at(self, value: datetime | None) -> str | None:
+        return value.isoformat() if value is not None else None
 
-    def get_revoked_at(self, value: datetime) -> datetime:
+    def get_revoked_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
 @dataclass(frozen=True, slots=True)
 class UserSessionResult(Result):
-    """A single session (refresh token) belonging to a user."""
+    """A single active session (refresh token) belonging to a user."""
 
     jti: str
     username: str
     created_at: datetime
     expires_at: datetime
 
-    def get_created_at(self, value: datetime) -> datetime:
+    def get_created_at(self, value: datetime) -> str:
         return value.isoformat()
 
-    def get_expires_at(self, value: datetime) -> datetime:
+    def get_expires_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -159,7 +167,7 @@ class PasswordChangeResult(Result):
     changed_at: datetime
     revoked_sessions: list[RevokedSessionResult]
 
-    def get_changed_at(self, value: datetime) -> datetime:
+    def get_changed_at(self, value: datetime) -> str:
         return value.isoformat()
 
     def get_revoked_sessions(self, value: list[RevokedSessionResult]) -> list[dict]:
@@ -174,7 +182,7 @@ class PasswordResetRequestResult(Result):
     identifier: str
     expires_at: datetime
 
-    def get_expires_at(self, value: datetime) -> datetime:
+    def get_expires_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -185,7 +193,7 @@ class PasswordResetResult(Result):
     username: str
     changed_at: datetime
 
-    def get_changed_at(self, value: datetime) -> datetime:
+    def get_changed_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -203,6 +211,9 @@ class VerifiedContactResult(Result):
     user: User | None
     is_newly_verified: bool
 
+    def get_user(self, value: User | None) -> dict | None:
+        return UserSerializer(value).data if value is not None else None
+
 
 @dataclass(frozen=True, slots=True)
 class UsernameChangeResult(Result):
@@ -212,7 +223,7 @@ class UsernameChangeResult(Result):
     new_username: str
     changed_at: datetime
 
-    def get_changed_at(self, value: datetime) -> datetime:
+    def get_changed_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -224,7 +235,7 @@ class EmailRemovalResult(Result):
     removed_email: str
     removed_at: datetime
 
-    def get_removed_at(self, value: datetime) -> datetime:
+    def get_removed_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -235,7 +246,7 @@ class EmailRemovalRequestResult(Result):
     email: str
     expires_at: datetime
 
-    def get_expires_at(self, value: datetime) -> datetime:
+    def get_expires_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -247,7 +258,7 @@ class PhoneRemovalResult(Result):
     removed_phone: str
     removed_at: datetime
 
-    def get_removed_at(self, value: datetime) -> datetime:
+    def get_removed_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -258,7 +269,7 @@ class PhoneRemovalRequestResult(Result):
     phone: str
     expires_at: datetime
 
-    def get_expires_at(self, value: datetime) -> datetime:
+    def get_expires_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -271,7 +282,7 @@ class EmailChangeResult(Result):
     new_email: str
     changed_at: datetime
 
-    def get_changed_at(self, value: datetime) -> datetime:
+    def get_changed_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -282,7 +293,7 @@ class EmailChangeRequestResult(Result):
     new_email: str
     expires_at: datetime
 
-    def get_expires_at(self, value: datetime) -> datetime:
+    def get_expires_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -295,7 +306,7 @@ class PhoneChangeResult(Result):
     new_phone: str
     changed_at: datetime
 
-    def get_changed_at(self, value: datetime) -> datetime:
+    def get_changed_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
@@ -306,5 +317,5 @@ class PhoneChangeRequestResult(Result):
     new_phone: str
     expires_at: datetime
 
-    def get_expires_at(self, value: datetime) -> datetime:
+    def get_expires_at(self, value: datetime) -> str:
         return value.isoformat()

@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _t
 
 from core.permissions.auth_based import AllowAny
 from core.views import APIView
-from djansin.kasejyan.serializers.verification_code import VerificationCedeSerializer
+from djansin.kasejyan.serializers.verification_code import VerificationCodeSerializer
 from djansin.kasejyan.services.verification_code import VerificationCodeService
 
 
@@ -41,7 +41,7 @@ class VerificationCodeView(APIView):
             ValidationError: When the payload is invalid. Raised by the
                 serializer via ``raise_exception=True``.
         """
-        serializer = VerificationCedeSerializer(data=request.data)
+        serializer = VerificationCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         result = VerificationCodeService()(serializer.validated_data["identifier"])

@@ -6,11 +6,11 @@ change atomically. Requires authentication.
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
-from djansin.kasejyan.serializers.username_change import ChangeUsernameSerializer
 from rest_framework import status
 
 from core.permissions.auth_based import IsAuthenticated
 from core.views import APIView, Response
+from djansin.kasejyan.serializers.username_change import ChangeUsernameSerializer
 from djansin.kasejyan.services.username_change import ChangeUsernameService
 
 

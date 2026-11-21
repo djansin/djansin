@@ -8,15 +8,15 @@ high-level, address-based lookup helpers used by kasejyan services.
 from typing import TYPE_CHECKING
 
 from core.models.managers import BaseManager
-
-from .querysets.email import EmailQuerySet
+from core.models.managers.mixins import BlockableManagerMixin
+from djansin.kasejyan.models.managers.querysets.email import EmailQuerySet
 
 
 if TYPE_CHECKING:
     from djansin.kasejyan.models import Email
 
 
-class EmailManager(BaseManager[EmailQuerySet]):
+class EmailManager(BlockableManagerMixin[EmailQuerySet], BaseManager[EmailQuerySet]):
     """Manager for the :class:`~djansin.kasejyan.models.Email` model.
 
     Wires the ``Email`` model to :class:`EmailQuerySet` and exposes

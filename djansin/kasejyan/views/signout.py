@@ -46,8 +46,7 @@ class SignoutView(APIView):
         serializer.is_valid(raise_exception=True)
 
         if serializer.validated_data["all_devices"]:
-            service = RevokeUserSessionsService()
-            revoked = service(identifier=request.user.username)
+            revoked = RevokeUserSessionsService()(identifier=request.user.username)
             return self.build_response(
                 message=_t("Logged out from all devices."),
                 code="ALL_SESSIONS_REVOKED",
@@ -55,8 +54,7 @@ class SignoutView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        service = SignoutService()
-        revoked = service(
+        revoked = SignoutService()(
             refresh_token=serializer.validated_data["refresh"],
             user=request.user,
         )

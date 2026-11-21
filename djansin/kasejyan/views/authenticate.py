@@ -3,6 +3,12 @@
 Accepts password-based or verification-code-based credentials,
 resolves or provisions the user, and returns a JWT token pair in
 the standard envelope. Open to unauthenticated clients.
+
+Verification codes are validated with ``purpose=CodePurpose.AUTHENTICATE``;
+a code issued for any other operation (e.g. email change or password
+reset) is rejected. Blocked contacts are rejected by the verification
+service before any code check, so a temporarily blocked email or phone
+cannot be used to sign in until the block expires.
 """
 
 from django.http import HttpRequest
@@ -22,6 +28,13 @@ class AuthenticateView(APIView):
     Accepts password-based or verification-code-based credentials,
     resolves or provisions the user, and returns a JWT token pair in
     the standard envelope. Open to unauthenticated clients.
+
+    Verification codes are validated with
+    ``purpose=CodePurpose.AUTHENTICATE``; a code issued for any other
+    operation (e.g. email change or password reset) is rejected.
+    Blocked contacts are rejected by the verification service before
+    any code check, so a temporarily blocked email or phone cannot be
+    used to sign in until the block expires.
     """
 
     permission_classes = [AllowAny]
@@ -45,6 +58,13 @@ class AuthenticateView(APIView):
         Raises:
             ValidationError: When the payload is invalid. Raised by the
                 serializer via ``raise_exception=True``.
+            DomainError: When both ``password`` and ``code`` are
+                supplied, or authentication fails (wrong password,
+                invalid/expired/wrong-purpose code, blocked contact,
+                unknown identifier). Raised by the service layer.
+            BusinessError: When a newly generated username collides at
+                the database level while provisioning a user. Raised by
+                the service layer.
         """
         serializer = AuthenticateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -53,13 +73,11 @@ class AuthenticateView(APIView):
         password = serializer.validated_data.get("password")
         code = serializer.validated_data.get("code")
 
-        auth_service = AuthenticateService()
-        registered_user = auth_service(
+        registered_user = AuthenticateService()(
             identifier=identifier, password=password, code=code
         )
 
-        token_service = AccessTokenService()
-        token = token_service(registered_user=registered_user)
+        token = AccessTokenService()(registered_user=registered_user)
 
         return self.build_response(
             message=_t("Authentication successful."),

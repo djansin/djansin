@@ -15,11 +15,15 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _t
 
 from core.models.base import Model
+from core.models.mixins import BlockableMixin
 from djansin.kasejyan.models.managers.email import EmailManager
-from djansin.kasejyan.models.mixins.verifiable import VerifiableMixin
+from djansin.kasejyan.models.mixins.verifiable import (
+    DEFAULT_CODE_TTL_MINUTES,
+    VerifiableMixin,
+)
 
 
-class Email(VerifiableMixin, Model):
+class Email(VerifiableMixin, BlockableMixin, Model):
     """Concrete model representing a unique, verifiable email address.
 
     Encapsulates a single email address that can optionally be attached to
@@ -62,6 +66,44 @@ class Email(VerifiableMixin, Model):
         help_text=_t("Example: user@domain.com - Maximum 254 characters"),
         error_messages={"unique": _t("This email address is already registered.")},
     )
+
+    def refresh_change_email_code(
+        self,
+        minutes: int = DEFAULT_CODE_TTL_MINUTES,
+        save: bool = True,
+    ) -> str:
+        """Issue a code authorizing an email change.
+
+        Args:
+            minutes (int, optional): Time-to-live for the new code, in
+                minutes. Defaults to :data:`DEFAULT_CODE_TTL_MINUTES`.
+            save (bool, optional): Whether to persist the changes.
+
+        Returns:
+            str: The newly generated verification code.
+        """
+        return self.refresh_code(
+            purpose=self.CodePurpose.CHANGE_CONTACT, minutes=minutes, save=save
+        )
+
+    def refresh_remove_email_code(
+        self,
+        minutes: int = DEFAULT_CODE_TTL_MINUTES,
+        save: bool = True,
+    ) -> str:
+        """Issue a code authorizing an email removal.
+
+        Args:
+            minutes (int, optional): Time-to-live for the new code, in
+                minutes. Defaults to :data:`DEFAULT_CODE_TTL_MINUTES`.
+            save (bool, optional): Whether to persist the changes.
+
+        Returns:
+            str: The newly generated verification code.
+        """
+        return self.refresh_code(
+            purpose=self.CodePurpose.REMOVE_CONTACT, minutes=minutes, save=save
+        )
 
     def __str__(self) -> str:
         return self.address

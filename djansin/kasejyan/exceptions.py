@@ -12,7 +12,7 @@ from typing import overload
 
 from django.utils.translation import gettext_noop as _n
 
-from core.exceptions.errors import ValidErrorDefinition
+from core.exceptions.errors import BizErrorDefinition, ValidErrorDefinition
 
 
 class InvalidVerificationCode(ValidErrorDefinition):
@@ -143,4 +143,44 @@ class InvalidLoginIdentifier(ValidErrorDefinition):
                 ``None``.
             **kwds: Additional template interpolation values.
         """
+        super().__init__(message_template, **kwds)
+
+
+class VerificationCodeStillValid(BizErrorDefinition):
+    """Error definition for an existing, still-valid verification code.
+
+    Raised when a new verification code is requested for an identifier
+    that already has a non-expired code. No message is dispatched in
+    this case; the caller should either reuse the existing code window
+    or wait for expiry before requesting a new one.
+
+    Attributes:
+        code: BIZ:VERIFICATION_CODE_STILL_VALID
+        http_status: 409 Conflict
+        message_template: "A verification code was already sent to this '{identifier}' and is still valid. Please wait before requesting another."
+        is_retryable: True (retry after the current code expires)
+
+    Example:
+        >>> raise VerificationCodeStillValidError(identifier="user@example.com")
+    """
+
+    code = "BIZ:VERIFICATION_CODE_STILL_VALID"
+    http_status = 409
+    message_template = _n(
+        "A verification code was already sent to this '{identifier}' and is still valid. Please wait before requesting another."
+    )
+    is_retryable = True
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        identifier: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes a still-valid verification code error definition."""
         super().__init__(message_template, **kwds)

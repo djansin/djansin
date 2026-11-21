@@ -1,12 +1,11 @@
-"""Serializer definitions for the password-reset flow.
+"""Serializers for the password-reset flow.
 
-This module exposes two DRF serializers used by the password-reset
-endpoints:
+Exposes two DRF serializers:
 
 * :class:`RequestPasswordResetSerializer` — validates the identifier
   used to request a verification code.
-* :class:`PasswordResetSerializer` — validates the identifier,
-  the verification code, and the new password (with confirmation).
+* :class:`PasswordResetSerializer` — validates the identifier, the
+  verification code, and the new password (with confirmation).
 """
 
 from django.utils.translation import gettext_lazy as _t
@@ -21,7 +20,7 @@ class RequestPasswordResetSerializer(Serializer):
 
     Accepts a single ``identifier`` (email, phone number, or username).
     The service layer resolves the user, picks the preferred contact
-    channel, and dispatches a verification code.
+    channel (phone, then email), and dispatches a verification code.
 
     Attributes:
         identifier (serializers.CharField): Write-only identifier
@@ -51,12 +50,14 @@ class PasswordResetSerializer(Serializer):
 
     Accepts the ``identifier`` that received the code, the six-digit
     ``code`` itself, and the ``new_password`` together with a matching
-    confirmation. Field-level validation enforces presence, length, and
-    code format; object-level validation ensures the confirmation
-    matches and the new password differs from the code (a common
-    copy-paste mistake). Deeper password-policy checks (similarity to
-    user attributes, common-password lists, etc.) are delegated to the
-    service layer, where the user instance is available.
+    confirmation.
+
+    Field-level validation enforces presence, length, and code format.
+    Object-level validation ensures the confirmation matches and the new
+    password differs from the code (a common copy-paste mistake). Deeper
+    password-policy checks (similarity to user attributes,
+    common-password lists, etc.) are delegated to the service layer,
+    where the user instance is available.
 
     Attributes:
         identifier (serializers.CharField): Write-only identifier that
@@ -134,10 +135,11 @@ class PasswordResetSerializer(Serializer):
         """Perform object-level validation across the serializer fields.
 
         Enforces the following invariants:
-            * ``new_password`` and ``new_password_confirm`` must match.
-            * ``new_password`` must not equal the verification ``code``
-              (a common copy-paste mistake that would otherwise produce
-              a trivially guessable password).
+
+        * ``new_password`` and ``new_password_confirm`` must match.
+        * ``new_password`` must not equal the verification ``code`` (a
+          common copy-paste mistake that would otherwise produce a
+          trivially guessable password).
 
         Args:
             data (dict): The validated field data collected by DRF.
@@ -146,7 +148,7 @@ class PasswordResetSerializer(Serializer):
             dict: The same ``data`` mapping, after all checks pass.
 
         Raises:
-            InputError: If any of the invariants above is violated.
+            InputError: If any of the invariants above are violated.
         """
         new_password = data.get("new_password")
         new_password_confirm = data.get("new_password_confirm")

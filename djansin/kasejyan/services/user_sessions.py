@@ -1,3 +1,14 @@
+"""Service layer for listing a user's active sessions.
+
+Exposes :class:`ListUserSessionsService`, which resolves a user from
+an email, phone number, or username and returns every outstanding
+refresh token issued to that user that is still usable — i.e. neither
+revoked (blacklisted) nor expired.
+
+The service does not interact with contact records, so ``CodePurpose``
+and block state are irrelevant here — listing is a pure JWT operation.
+"""
+
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
@@ -19,11 +30,24 @@ class ListUserSessionsService(UserResolverMixin, Service[list[UserSessionResult]
     Resolves the user from an email, phone number, or username, then
     returns every outstanding refresh token issued to that user that is
     still usable — i.e. neither revoked (blacklisted) nor expired. Since
-    only active sessions are returned, ``is_revoked`` is always ``False``
-    and ``revoked_at`` is always ``None``.
+    only active sessions are returned, ``is_revoked`` is always
+    ``False`` and ``revoked_at`` is always ``None``.
     """
 
     def execute(self, identifier: str) -> list[UserSessionResult]:
+        """List the active sessions of the resolved user.
+
+        Args:
+            identifier (str): An email address, phone number, or
+                username identifying the user.
+
+        Returns:
+            list[UserSessionResult]: The user's active sessions, newest
+            first. Revoked and expired sessions are omitted.
+
+        Raises:
+            BusinessError: If no user matches ``identifier``.
+        """
         user = self._resolve_user(identifier)
 
         if user is None:
@@ -39,14 +63,14 @@ class ListUserSessionsService(UserResolverMixin, Service[list[UserSessionResult]
                 )
             )
             .filter(is_revoked=False)
-            .only("jti", "created_at", "expires_at", "user__username")
+            .only("jti", "created_at", "expires_at")
             .order_by("-created_at")
         )
 
         return [
             UserSessionResult(
                 jti=token_obj.jti,
-                username=token_obj.user.username,
+                username=user.username,
                 created_at=token_obj.created_at,
                 expires_at=token_obj.expires_at,
             )

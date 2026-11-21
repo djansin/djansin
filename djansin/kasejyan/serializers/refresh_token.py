@@ -1,8 +1,8 @@
-"""Serializer definitions for the refresh-token flow.
+"""Serializer for the refresh-token flow.
 
-This module exposes :class:`RefreshTokenSerializer`, a DRF serializer that
-validates the payload used by the token-refresh view. The payload must
-contain exactly one non-blank ``refresh_token`` string.
+Exposes :class:`RefreshTokenSerializer`, a DRF serializer that validates
+the payload used by the token-refresh view. The payload must contain
+exactly one non-blank ``refresh_token`` string.
 """
 
 from django.utils.translation import gettext_lazy as _t
@@ -16,15 +16,18 @@ class RefreshTokenSerializer(Serializer):
     """Serializer validating the payload for refreshing an access token.
 
     Accepts a single write-only ``refresh_token`` string. The value is a
-    JWT issued previously by the authentication flow. Structural validation
-    (presence, non-blank, minimum length) happens at the field level; the
-    token's cryptographic validity and business rules (active user, not
-    revoked, etc.) are enforced by :class:`RefreshTokenService`.
+    JWT issued previously by the authentication flow.
+
+    Field-level validation enforces presence, non-blankness, length
+    bounds, and a lightweight structural check that the value is shaped
+    like a JWT (three dot-separated non-empty segments). The token's
+    cryptographic validity and business rules (active user, not revoked,
+    not expired, etc.) are enforced by :class:`RefreshTokenService`.
 
     Attributes:
         refresh_token (serializers.CharField): Write-only refresh token
-            supplied by the client. Must be non-blank and at least 16
-            characters long.
+            supplied by the client. Must be non-blank, at least 16
+            characters long, and shaped like a JWT.
     """
 
     refresh_token = serializers.CharField(
@@ -53,14 +56,19 @@ class RefreshTokenSerializer(Serializer):
         dot-separated Base64URL segments; anything that doesn't match
         this shape cannot be a valid token and is rejected early.
 
+        This check does **not** verify the token's signature, expiry, or
+        revocation status — those are the service layer's responsibility.
+
         Args:
-            refresh_token (str): The raw refresh token provided by the client.
+            refresh_token (str): The raw refresh token provided by the
+                client.
 
         Returns:
             str: The validated refresh token, unchanged.
 
         Raises:
-            InputError: If the token does not have the expected JWT shape.
+            InputError: If the token does not have the expected JWT
+                shape.
         """
         if refresh_token.count(".") != 2 or any(
             not part for part in refresh_token.split(".")

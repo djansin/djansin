@@ -9,8 +9,7 @@ retrieving users by username, email address, or phone number.
 from typing import TYPE_CHECKING
 
 from core.models.managers import BaseUserManager
-
-from .querysets.user import UserQuerySet
+from djansin.kasejyan.models.managers.querysets.user import UserQuerySet
 
 
 if TYPE_CHECKING:

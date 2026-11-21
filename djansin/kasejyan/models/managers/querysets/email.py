@@ -6,9 +6,10 @@ chaining API provided by :class:`BaseQuerySet`.
 """
 
 from core.models.managers.querysets import BaseQuerySet
+from core.models.managers.querysets.mixins import BlockableQuerySetMixin
 
 
-class EmailQuerySet(BaseQuerySet):
+class EmailQuerySet(BlockableQuerySetMixin, BaseQuerySet):
     """QuerySet for the :class:`~djansin.kasejyan.models.Email` model.
 
     Inherits all chainable filtering helpers from

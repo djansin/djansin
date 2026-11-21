@@ -8,15 +8,15 @@ high-level, number-based lookup helpers used by kasejyan services.
 from typing import TYPE_CHECKING
 
 from core.models.managers import BaseManager
-
-from .querysets.phone import PhoneQuerySet
+from core.models.managers.mixins import BlockableManagerMixin
+from djansin.kasejyan.models.managers.querysets.phone import PhoneQuerySet
 
 
 if TYPE_CHECKING:
     from djansin.kasejyan.models import Phone
 
 
-class PhoneManager(BaseManager[PhoneQuerySet]):
+class PhoneManager(BlockableManagerMixin[PhoneQuerySet], BaseManager[PhoneQuerySet]):
     """Manager for the :class:`~djansin.kasejyan.models.Phone` model.
 
     Wires the ``Phone`` model to :class:`PhoneQuerySet` and exposes

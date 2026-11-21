@@ -578,3 +578,43 @@ class BusinessRuleViolation(BizErrorDefinition):
         Passes all arguments to the parent class constructor.
         """
         super().__init__(message_template, **kwds)
+
+
+class OperationNotAllowed(BizErrorDefinition):
+    """Error definition for invalid state transitions.
+
+    This error occurs when an operation is attempted but the current state of
+    the system or resource does not permit it.
+
+    Attributes:
+        code: "BIZ:OPERATION_NOT_ALLOWED"
+        http_status: 403 Forbidden
+        message_template: "Operation not allowed. {reason}"
+        is_retryable: False (operation not allowed in this state)
+
+    Example:
+        >>> # Wrap this definition in a business-specific exception
+        ... raise BusinessError(OperationNotAllowed(reason="Account is inactive"))
+    """
+
+    code = "BIZ:OPERATION_NOT_ALLOWED"
+    http_status = 403
+    message_template = _n("Operation not allowed. {reason}")
+    is_retryable = False
+
+    @overload
+    def __init__(
+        self,
+        message_template: str | None = None,
+        /,
+        *,
+        reason: str | None = None,
+        **kwds,
+    ) -> None: ...
+
+    def __init__(self, message_template: str | None = None, /, **kwds):
+        """Initializes an operation not allowed error definition.
+
+        Passes all arguments to the parent class constructor.
+        """
+        super().__init__(message_template, **kwds)
