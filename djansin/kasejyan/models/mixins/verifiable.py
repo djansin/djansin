@@ -429,3 +429,6 @@ class VerifiableMixin(AbstractModelMixin):
         return self.refresh_code(
             purpose=self.CodePurpose.AUTHENTICATE, minutes=minutes, save=save
         )
+
+
+CodePurpose = VerifiableMixin.CodePurpose
