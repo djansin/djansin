@@ -10,6 +10,7 @@ colorlog~=6.10                          # Enhances logging output with colors to
 ## Testing Framework
 pytest~=9.1                             # A mature full-featured Python testing framework.
 pytest-mock~=3.16                       # Pytest plugin providing the mocker fixture for simplified mocking.
+freezegun~=1.5                          # Freeze time in tests to make time-dependent logic deterministic (e.g. code expiry, token TTL).
 
 ## Django Testing Integration
 pytest-django~=4.14                     # Pytest plugin that provides Django integration for simplified and powerful testing workflows.
