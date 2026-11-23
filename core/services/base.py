@@ -28,7 +28,7 @@ TContext = Mapping[str, Any]
 
 
 class Service(ABC, Generic[TResult]):
-    atomic: ClassVar[bool] = True
+    atomic: ClassVar[bool] = False
 
     @abstractmethod
     def execute(self, *args: Any, **kwargs: Any) -> TResult: ...
