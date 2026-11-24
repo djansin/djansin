@@ -65,21 +65,22 @@ class RevokeSessionService(Service[RevokedSessionResult]):
         token_obj = self._resolve_token(jti=jti, user=user)
         self._ensure_revokable(token_obj)
 
-        now = timezone.now()
-
         try:
-            RefreshToken(token=token_obj.token).blacklist()
+            blacklisted = RefreshToken(token=token_obj.token).blacklist()
         except TokenError as exc:
             raise BusinessError(
                 BusinessRuleViolation(reason=_t("Session could not be revoked."))
             ) from exc
 
+        blacklisted = (
+            blacklisted if isinstance(blacklisted, BlacklistedToken) else blacklisted[0]
+        )
         return RevokedSessionResult(
             jti=token_obj.jti,
             username=token_obj.user.username,
             created_at=token_obj.created_at,
             expires_at=token_obj.expires_at,
-            revoked_at=now,
+            revoked_at=blacklisted.blacklisted_at,
         )
 
     def _resolve_token(self, *, jti: str, user: User) -> OutstandingToken:

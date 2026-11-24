@@ -1,42 +1,34 @@
-"""Application Configuration for Kasejyan App.
+"""Application configuration for the ``kasejyan`` app.
 
-This module defines the AppConfig class that registers this Django app
-with the project. It controls how Django discovers, initializes, and
-references the application throughout the project lifecycle.
-
-The configuration handles critical app metadata:
-    - Python import path for the app (name attribute)
-    - Human-readable display name (verbose_name)
-    - Default primary key field type
-    - App initialization logic (ready() method)
-
-Attributes:
-    default_auto_field: Default primary key type for models
-    name: Python import path (auto-configured for your structure)
-    verbose_name: Human-readable app name for admin display
-
-Note:
-    - The 'name' attribute is automatically set to 'djansin.kasejyan'
-    - Override ready() method for signal registration
-    - Keep configuration minimal unless app initialization is needed
+Registers the app under the short label ``kasejyan`` and sets the
+default primary-key type to ``BigAutoField`` (matching the models).
 """
 
 from django.apps import AppConfig
 
 
 class KasejyanConfig(AppConfig):
-    """Django AppConfig for Kasejyan application.
+    """Configuration for the ``kasejyan`` application.
 
-    This class configures how Django interacts with this app, including
-    its Python path, display name, and initialization behavior.
-
-    Attributes:
-        default_auto_field: Model primary key field type (BigAutoField)
-        name: Python import path (e.g., 'djansin.kasejyan')
-        verbose_name: Display name in admin interface
+    The short ``label`` (``"kasejyan"``) is used in migrations and in
+    ``apps.get_model("kasejyan", ...)`` lookups, keeping model
+    references stable regardless of the package path.
     """
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "djansin.kasejyan"
     label = "kasejyan"
     verbose_name = "Kasejyan Application"
+
+    def ready(self) -> None:
+        """Perform application initialization.
+
+        Signal handlers (if any) should be imported here so they are
+        registered once the app registry is fully populated. Currently
+        no signals are registered by this app; the method is kept as
+        an explicit extension point for future needs (e.g. auto-blocking
+        a contact after repeated failed attempts).
+        """
+        # Import signal handlers here if/when needed:
+        # from djansin.kasejyan import signals  # noqa: F401
+        ...

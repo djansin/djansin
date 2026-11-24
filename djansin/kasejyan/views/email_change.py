@@ -15,14 +15,18 @@ their email.
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 
 from core.permissions.auth_based import IsAuthenticated
 from core.views import APIView, Response
 from djansin.kasejyan.serializers.email_change import (
     ChangeEmailSerializer,
+    EmailChangeEnvelopeSerializer,
+    EmailChangeRequestEnvelopeSerializer,
     RequestChangeEmailSerializer,
 )
+from djansin.kasejyan.serializers.error import ErrorEnvelopeSerializer
 from djansin.kasejyan.services.email_change import ChangeEmailService
 from djansin.kasejyan.services.email_change_request import RequestChangeEmailService
 
@@ -38,6 +42,23 @@ class ChangeEmailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Confirm an email change",
+        description=(
+            "Verifies the six-digit code sent to the new email and "
+            "swaps the authenticated user's current email for the new "
+            "one. The new email must not be owned by another account. "
+            "A temporarily blocked email is rejected explicitly "
+            "(after the code is verified)."
+        ),
+        request=ChangeEmailSerializer,
+        responses={
+            200: EmailChangeEnvelopeSerializer,
+            401: ErrorEnvelopeSerializer,
+            422: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def post(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Handle an email-change confirmation.
 
@@ -90,6 +111,23 @@ class RequestChangeEmailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Request an email-change code",
+        description=(
+            "Dispatches a six-digit verification code to the supplied "
+            "email address. The response is success-shaped regardless "
+            "of whether the email exists, is already owned, or is "
+            "blocked, so the endpoint cannot be used to enumerate "
+            "emails or probe ownership/block state."
+        ),
+        request=RequestChangeEmailSerializer,
+        responses={
+            200: EmailChangeRequestEnvelopeSerializer,
+            401: ErrorEnvelopeSerializer,
+            422: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def post(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Handle an email-change code request.
 

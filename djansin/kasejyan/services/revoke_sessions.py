@@ -14,7 +14,6 @@ operation.
 import logging
 from collections.abc import Iterable
 
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import (
@@ -94,7 +93,6 @@ class RevokeUserSessionsService(UserResolverMixin, Service[list[RevokedSessionRe
         )
 
         revoked: list[RevokedSessionResult] = []
-        now = timezone.now()
 
         for token_obj in token_objs:
             if token_obj.jti in already_blacklisted_jtis:
@@ -113,15 +111,19 @@ class RevokeUserSessionsService(UserResolverMixin, Service[list[RevokedSessionRe
                 )
                 continue
 
+            blacklisted = (
+                blacklisted
+                if isinstance(blacklisted, BlacklistedToken)
+                else blacklisted[0]
+            )
+
             revoked.append(
                 RevokedSessionResult(
                     jti=token_obj.jti,
                     username=token_obj.user.username,
                     created_at=token_obj.created_at,
                     expires_at=token_obj.expires_at,
-                    revoked_at=blacklisted.blacklisted_at
-                    if isinstance(blacklisted, BlacklistedToken)
-                    else now,
+                    revoked_at=blacklisted.blacklisted_at,
                 )
             )
 

@@ -63,3 +63,32 @@ class SignoutSerializer(Serializer):
         if not attrs.get("all_devices") and not attrs.get("refresh"):
             self.raise_input_error(RequiredField(field="'refresh'"))
         return attrs
+
+
+class RevokedSessionResultSerializer(Serializer):
+    """A single revoked session in the response."""
+
+    jti = serializers.CharField()
+    username = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField(allow_null=True)
+    expires_at = serializers.DateTimeField(allow_null=True)
+    revoked_at = serializers.DateTimeField()
+
+
+class SignoutSingleEnvelopeSerializer(Serializer):
+    """Envelope for single-device signout (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = serializers.ListField(
+        child=RevokedSessionResultSerializer(),
+        help_text="A single-element list containing the revoked session.",
+    )
+
+
+class SignoutAllEnvelopeSerializer(Serializer):
+    """Envelope for all-devices signout (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = RevokedSessionResultSerializer(many=True)

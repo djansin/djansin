@@ -224,7 +224,7 @@ class ChangeEmailService(Service[EmailChangeResult]):
             VerifyContactService()(
                 identifier=email,
                 code=code,
-                purpose=Email.CodePurpose.CHANGE_EMAIL,
+                purpose=Email.CodePurpose.CHANGE_CONTACT,
             )
         except DomainError:
             raise DomainError(

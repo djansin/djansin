@@ -4,14 +4,22 @@ Accepts a previously issued refresh token, validates it, rotates it
 (blacklisting the old one), and returns a fresh JWT token pair in the
 standard envelope. Open to unauthenticated clients, since the refresh
 token itself is the credential.
+
+The endpoint does not interact with contact records, so ``CodePurpose``
+and block state are irrelevant here — refresh is a pure JWT operation.
+A blocked email or phone does not prevent refreshing an existing
+session; only the refresh token's own validity matters.
 """
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 
 from core.permissions.auth_based import AllowAny
 from core.views import APIView, Response
+from djansin.kasejyan.serializers.authenticate import AuthTokenEnvelopeSerializer
+from djansin.kasejyan.serializers.error import ErrorEnvelopeSerializer
 from djansin.kasejyan.serializers.refresh_token import RefreshTokenSerializer
 from djansin.kasejyan.services.refresh_token import RefreshTokenService
 
@@ -27,6 +35,23 @@ class RefreshTokenView(APIView):
 
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Refresh an access token",
+        description=(
+            "Accepts a previously issued refresh token, validates it, "
+            "rotates it (blacklisting the old one), and returns a "
+            "fresh JWT token pair. Open to unauthenticated clients, "
+            "since the refresh token itself is the credential. "
+            "Blocked emails or phones do not affect refresh — only the "
+            "refresh token's own validity matters."
+        ),
+        request=RefreshTokenSerializer,
+        responses={
+            200: AuthTokenEnvelopeSerializer,
+            422: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def post(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Handle a token-refresh request.
 
@@ -56,8 +81,7 @@ class RefreshTokenView(APIView):
 
         refresh_token = serializer.validated_data.get("refresh_token")
 
-        token_service = RefreshTokenService()
-        token = token_service(refresh_token=refresh_token)
+        token = RefreshTokenService()(refresh_token=refresh_token)
 
         return self.build_response(
             message=_t("Token refreshed successfully."),

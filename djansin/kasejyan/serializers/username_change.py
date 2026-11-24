@@ -76,3 +76,19 @@ class ChangeUsernameSerializer(Serializer):
             raise self.raise_input_error(InvalidUsername(field_errors=errs))
 
         return new_username
+
+
+class UsernameChangeResultSerializer(Serializer):
+    """Payload of a successful username change."""
+
+    old_username = serializers.CharField()
+    new_username = serializers.CharField()
+    changed_at = serializers.DateTimeField()
+
+
+class UsernameChangeEnvelopeSerializer(Serializer):
+    """Envelope for ``ChangeUsernameView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = UsernameChangeResultSerializer()

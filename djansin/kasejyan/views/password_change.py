@@ -8,6 +8,7 @@ authentication.
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -16,7 +17,11 @@ from core.exceptions import BusinessError
 from core.exceptions.errors.business import BusinessRuleViolation
 from core.permissions.auth_based import IsAuthenticated
 from core.views import APIView, Response
-from djansin.kasejyan.serializers.password_change import ChangePasswordSerializer
+from djansin.kasejyan.serializers.error import ErrorEnvelopeSerializer
+from djansin.kasejyan.serializers.password_change import (
+    ChangePasswordSerializer,
+    PasswordChangeEnvelopeSerializer,
+)
 from djansin.kasejyan.services.password_change import ChangePasswordService
 
 
@@ -32,6 +37,23 @@ class ChangePasswordView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Change the current user's password",
+        description=(
+            "Verifies the current password, sets the new one, and "
+            "revokes every other session of the user. When "
+            "``refresh_token`` is supplied, the session it belongs to "
+            "is preserved; otherwise every session — including the "
+            "current one — is revoked."
+        ),
+        request=ChangePasswordSerializer,
+        responses={
+            200: PasswordChangeEnvelopeSerializer,
+            401: ErrorEnvelopeSerializer,
+            422: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def post(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Handle a password-change request.
 
@@ -49,8 +71,10 @@ class ChangePasswordView(APIView):
             ValidationError: When the payload is invalid. Raised by the
                 serializer via ``raise_exception=True``.
             BusinessError: When the current password is wrong, the new
-                password is invalid, or the new password equals the
-                current one. Raised by the service layer.
+                password is invalid, the new password equals the
+                current one, or the supplied refresh token is
+                structurally invalid. Raised by the service layer or
+                :meth:`_resolve_current_jti`.
         """
         serializer = ChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

@@ -12,7 +12,6 @@ blocked contact cannot be verified (and therefore cannot be used to
 authorize an operation) until the block expires.
 """
 
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _t
 
 from core.exceptions import DomainError

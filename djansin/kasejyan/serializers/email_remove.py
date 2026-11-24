@@ -88,3 +88,34 @@ class RemoveEmailSerializer(Serializer):
             "max_length": _t("Verification code must be exactly 6 characters long."),
         },
     )
+
+
+class EmailRemovalResultSerializer(Serializer):
+    """Payload of a successful email removal."""
+
+    username = serializers.CharField()
+    removed_email = serializers.EmailField()
+    removed_at = serializers.DateTimeField()
+
+
+class EmailRemovalRequestResultSerializer(Serializer):
+    """Payload of a successful email-removal code request."""
+
+    email = serializers.EmailField()
+    expires_at = serializers.DateTimeField()
+
+
+class EmailRemovalEnvelopeSerializer(Serializer):
+    """Envelope for ``RemoveEmailView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = EmailRemovalResultSerializer()
+
+
+class EmailRemovalRequestEnvelopeSerializer(Serializer):
+    """Envelope for ``RequestRemoveEmailView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = EmailRemovalRequestResultSerializer()

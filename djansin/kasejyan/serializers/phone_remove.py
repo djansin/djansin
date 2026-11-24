@@ -134,3 +134,34 @@ class RemovePhoneSerializer(Serializer):
             )
 
         return phone
+
+
+class PhoneRemovalResultSerializer(Serializer):
+    """Payload of a successful phone removal."""
+
+    username = serializers.CharField()
+    removed_phone = serializers.CharField()
+    removed_at = serializers.DateTimeField()
+
+
+class PhoneRemovalEnvelopeSerializer(Serializer):
+    """Envelope for ``RemovePhoneView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = PhoneRemovalResultSerializer()
+
+
+class PhoneRemovalRequestResultSerializer(Serializer):
+    """Payload of a successful phone-removal code request."""
+
+    phone = serializers.CharField()
+    expires_at = serializers.DateTimeField()
+
+
+class PhoneRemovalRequestEnvelopeSerializer(Serializer):
+    """Envelope for ``RequestRemovePhoneView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = PhoneRemovalRequestResultSerializer()

@@ -1,19 +1,30 @@
-"""Request a verification code to change the user's phone number.
+"""Views for the phone-change flow.
 
-Verifies the new phone is not already owned, then dispatches a
-one-time code to it. First step of the two-step phone-change flow;
-the second step is handled by :class:`ChangePhoneView`. Requires
-authentication.
+Exposes two endpoints:
+
+* :class:`RequestChangePhoneView` — dispatches a verification code to
+  the new phone. The request step does not disclose whether the phone
+  exists, is already owned, or is blocked: a generic success-shaped
+  response is returned in all cases.
+* :class:`ChangePhoneView` — verifies the code and swaps the user's
+  current phone for the new one.
+
+Both require authentication; the caller must be signed in to change
+their phone.
 """
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 
 from core.permissions.auth_based import IsAuthenticated
 from core.views import APIView, Response
+from djansin.kasejyan.serializers.error import ErrorEnvelopeSerializer
 from djansin.kasejyan.serializers.phone_change import (
     ChangePhoneSerializer,
+    PhoneChangeEnvelopeSerializer,
+    PhoneChangeRequestEnvelopeSerializer,
     RequestChangePhoneSerializer,
 )
 from djansin.kasejyan.services.phone_change import ChangePhoneService
@@ -21,10 +32,33 @@ from djansin.kasejyan.services.phone_change_request import RequestChangePhoneSer
 
 
 class ChangePhoneView(APIView):
-    """Change the authenticated user's phone number."""
+    """Change the authenticated user's phone number.
+
+    Verifies the one-time code sent to the new phone, then swaps the
+    user's current phone for the new one. A blocked phone is rejected
+    explicitly (after the code is verified); a phone owned by another
+    account is also rejected explicitly (after the code is verified).
+    """
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Confirm a phone change",
+        description=(
+            "Verifies the six-digit code sent to the new phone and "
+            "swaps the authenticated user's current phone for the new "
+            "one. The new phone must not be owned by another account. "
+            "A temporarily blocked phone is rejected explicitly "
+            "(after the code is verified)."
+        ),
+        request=ChangePhoneSerializer,
+        responses={
+            200: PhoneChangeEnvelopeSerializer,
+            401: ErrorEnvelopeSerializer,
+            422: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def post(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Handle a phone-change confirmation.
 
@@ -41,9 +75,12 @@ class ChangePhoneView(APIView):
         Raises:
             ValidationError: When the payload is invalid. Raised by the
                 serializer via ``raise_exception=True``.
-            BusinessError: When the code is invalid or expired, or the
-                new phone is already owned by another user. Raised by
-                the service layer.
+            DomainError: When the phone has no pending change, or the
+                code is invalid/expired/issued for a different purpose.
+                Raised by the service layer.
+            BusinessError: When the phone is temporarily blocked or is
+                already owned by another user. Raised by the service
+                layer.
         """
         serializer = ChangePhoneSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -63,10 +100,34 @@ class ChangePhoneView(APIView):
 
 
 class RequestChangePhoneView(APIView):
-    """Request a verification code to change the user's phone number."""
+    """Request a verification code to change the user's phone number.
+
+    Verifies that the new phone is syntactically valid, then dispatches
+    a one-time code to it. Ownership and block state are not disclosed
+    at this step: a generic success-shaped response is returned in all
+    cases, so the endpoint cannot be used to enumerate phones or probe
+    ownership/block state.
+    """
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Request a phone-change code",
+        description=(
+            "Dispatches a six-digit verification code to the supplied "
+            "phone number. The response is success-shaped regardless "
+            "of whether the phone exists, is already owned, or is "
+            "blocked, so the endpoint cannot be used to enumerate "
+            "phones or probe ownership/block state."
+        ),
+        request=RequestChangePhoneSerializer,
+        responses={
+            200: PhoneChangeRequestEnvelopeSerializer,
+            401: ErrorEnvelopeSerializer,
+            422: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def post(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Handle a phone-change code request.
 
@@ -78,14 +139,14 @@ class RequestChangePhoneView(APIView):
 
         Returns:
             An enveloped ``200 OK`` response containing the destination
-            phone and the code's expiry.
+            phone and the code's expiry. When the phone is blocked, the
+            response is indistinguishable from the success case.
 
         Raises:
             ValidationError: When the payload is invalid. Raised by the
                 serializer via ``raise_exception=True``.
-            BusinessError: When the phone is invalid, already linked to
-                the user, already taken by another user, or still has a
-                valid code. Raised by the service layer.
+            BusinessError: When a still-valid code is already
+                outstanding for this phone. Raised by the service layer.
         """
         serializer = RequestChangePhoneSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

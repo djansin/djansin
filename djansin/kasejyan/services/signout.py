@@ -79,14 +79,15 @@ class SignoutService(Service[RevokedSessionResult]):
                 BusinessRuleViolation(reason=_t("Session could not be revoked."))
             ) from exc
 
+        blacklisted = (
+            blacklisted if isinstance(blacklisted, BlacklistedToken) else blacklisted[0]
+        )
         return RevokedSessionResult(
             jti=token_obj.jti,
             username=token_obj.user.username,
             created_at=token_obj.created_at,
             expires_at=token_obj.expires_at,
-            revoked_at=blacklisted.blacklisted_at
-            if isinstance(blacklisted, BlacklistedToken)
-            else timezone.now(),
+            revoked_at=blacklisted.blacklisted_at,
         )
 
     def _extract_jti(self, refresh_token: str) -> str:

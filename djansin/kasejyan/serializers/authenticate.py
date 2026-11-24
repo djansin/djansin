@@ -18,6 +18,7 @@ from core.utils.user_identifier import (
     is_valid_identifier,
     is_valid_phone,
 )
+from djansin.kasejyan.serializers.user import UserSerializer
 
 
 class AuthenticateSerializer(Serializer):
@@ -180,3 +181,30 @@ class AuthenticateSerializer(Serializer):
             )
 
         return data
+
+
+class EnvelopeSerializer(Serializer):
+    """Standard response envelope used by every auth endpoint."""
+
+    message = serializers.CharField(help_text="Human-readable result message.")
+    code = serializers.CharField(help_text="Machine-readable result code.")
+    data = serializers.JSONField(help_text="Endpoint-specific payload.")
+
+
+class TokenPairSerializer(Serializer):
+    """Token pair and its metadata, as returned by IssueTokenResult."""
+
+    token_type = serializers.CharField(default="Bearer")
+    refresh = serializers.CharField()
+    access = serializers.CharField()
+    access_expires_at = serializers.DateTimeField()
+    refresh_expires_at = serializers.DateTimeField()
+    access_expires_in = serializers.IntegerField()
+    refresh_expires_in = serializers.IntegerField()
+    user = UserSerializer()
+
+
+class AuthTokenEnvelopeSerializer(EnvelopeSerializer):
+    """Envelope for ``AuthenticateView`` and ``RefreshTokenView``."""
+
+    data = TokenPairSerializer()

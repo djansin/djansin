@@ -169,3 +169,38 @@ class PasswordResetSerializer(Serializer):
             )
 
         return data
+
+
+class PasswordResetRequestResultSerializer(Serializer):
+    """Payload of a successful password-reset code request."""
+
+    channel = serializers.CharField(help_text="``email`` or ``phone``.")
+    identifier = serializers.CharField(
+        help_text="The destination identifier (email address or phone number)."
+    )
+    expires_at = serializers.DateTimeField(
+        help_text="When the dispatched code expires."
+    )
+
+
+class PasswordResetRequestEnvelopeSerializer(Serializer):
+    """Envelope for ``RequestPasswordResetView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = PasswordResetRequestResultSerializer()
+
+
+class PasswordResetResultSerializer(Serializer):
+    """Payload of a successful password reset."""
+
+    username = serializers.CharField()
+    changed_at = serializers.DateTimeField()
+
+
+class PasswordResetEnvelopeSerializer(Serializer):
+    """Envelope for ``PasswordResetView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = PasswordResetResultSerializer()

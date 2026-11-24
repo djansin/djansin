@@ -86,3 +86,23 @@ class ChangeEmailSerializer(Serializer):
             "max_length": _t("Verification code must be exactly 6 characters long."),
         },
     )
+
+
+class EmailChangeEnvelopeSerializer(Serializer):
+    """Envelope for ``ChangeEmailView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = serializers.DictField(
+        help_text=(
+            "Contains ``username``, ``old_email``, ``new_email``, and ``changed_at``."
+        )
+    )
+
+
+class EmailChangeRequestEnvelopeSerializer(Serializer):
+    """Envelope for ``RequestChangeEmailView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = serializers.DictField(help_text="Contains ``new_email`` and ``expires_at``.")

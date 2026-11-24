@@ -3,7 +3,7 @@ from .phone import Phone
 from .user import User
 
 
-__all__ = [
+__all__: list[str] = [
     "Email",
     "Phone",
     "User",

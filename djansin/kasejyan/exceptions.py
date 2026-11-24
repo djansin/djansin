@@ -1,13 +1,3 @@
-"""Domain-specific error definitions for the authentication application.
-
-This module declares concrete :class:`~core.exceptions.errors.ValidErrorDefinition`
-subclasses that describe authentication-related failure conditions in a
-structured, machine-readable form. Each definition carries a stable error
-code, an HTTP status, a translatable message template, and a retryability
-hint, allowing services and serializers to raise consistent errors across
-the API.
-"""
-
 from typing import overload
 
 from django.utils.translation import gettext_noop as _n

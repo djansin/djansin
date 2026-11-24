@@ -64,3 +64,20 @@ class VerificationCodeSerializer(Serializer):
             raise self.raise_input_error(InvalidIdentifier(identifier=identifier))
 
         return identifier
+
+
+class CodeDispatchResultSerializer(Serializer):
+    """Payload of a successful verification-code dispatch."""
+
+    type = serializers.CharField(help_text="``email`` or ``phone``.")
+    identifier = serializers.CharField(
+        help_text="The destination identifier (email address or phone number)."
+    )
+
+
+class CodeDispatchEnvelopeSerializer(Serializer):
+    """Envelope for ``VerificationCodeView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = CodeDispatchResultSerializer()

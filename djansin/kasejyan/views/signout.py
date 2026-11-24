@@ -3,15 +3,23 @@
 Revokes either the current refresh token or every active session of
 the authenticated user, depending on the payload. Requires
 authentication.
+
+The endpoint does not interact with contact records, so ``CodePurpose``
+and block state are irrelevant here — logout is a pure JWT operation.
 """
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 
 from core.permissions.auth_based import IsAuthenticated
 from core.views import APIView, Response
-from djansin.kasejyan.serializers.signout import SignoutSerializer
+from djansin.kasejyan.serializers.error import ErrorEnvelopeSerializer
+from djansin.kasejyan.serializers.signout import (
+    SignoutSerializer,
+    SignoutSingleEnvelopeSerializer,
+)
 from djansin.kasejyan.services.revoke_sessions import RevokeUserSessionsService
 from djansin.kasejyan.services.signout import SignoutService
 
@@ -26,6 +34,29 @@ class SignoutView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Log out the authenticated user",
+        description=(
+            "By default, blacklists the refresh token supplied in the "
+            "payload (log out this device only). When ``all_devices`` "
+            "is true, blacklists every outstanding refresh token of "
+            "the authenticated user instead."
+        ),
+        request=SignoutSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=SignoutSingleEnvelopeSerializer,
+                description=(
+                    "Single-device logout. ``data`` is a single-element "
+                    "list containing the revoked session."
+                ),
+            ),
+            400: ErrorEnvelopeSerializer,
+            401: ErrorEnvelopeSerializer,
+            422: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def post(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Handle a logout request.
 
@@ -40,7 +71,12 @@ class SignoutView(APIView):
             all-devices logout it contains the list of revoked sessions.
 
         Raises:
-            ValidationError: When the payload is invalid.
+            ValidationError: When the payload is invalid. Raised by the
+                serializer via ``raise_exception=True``.
+            BusinessError: When the session does not exist, belongs to
+                another user, has already been revoked, has expired,
+                or the resolved user is missing. Raised by the service
+                layer.
         """
         serializer = SignoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

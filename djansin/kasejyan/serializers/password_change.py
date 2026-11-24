@@ -113,3 +113,29 @@ class ChangePasswordSerializer(Serializer):
             )
 
         return data
+
+
+class RevokedSessionSerializer(Serializer):
+    """A single revoked session in the password-change response."""
+
+    jti = serializers.CharField()
+    username = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField(allow_null=True)
+    expires_at = serializers.DateTimeField(allow_null=True)
+    revoked_at = serializers.DateTimeField()
+
+
+class PasswordChangeResultSerializer(Serializer):
+    """Payload of a successful password change."""
+
+    username = serializers.CharField()
+    changed_at = serializers.DateTimeField()
+    revoked_sessions = RevokedSessionSerializer(many=True)
+
+
+class PasswordChangeEnvelopeSerializer(Serializer):
+    """Envelope for ``ChangePasswordView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = PasswordChangeResultSerializer()

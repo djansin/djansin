@@ -134,3 +134,35 @@ class ChangePhoneSerializer(Serializer):
             )
 
         return new_phone
+
+
+class PhoneChangeResultSerializer(Serializer):
+    """Payload of a successful phone change."""
+
+    username = serializers.CharField()
+    old_phone = serializers.CharField(allow_null=True)
+    new_phone = serializers.CharField()
+    changed_at = serializers.DateTimeField()
+
+
+class PhoneChangeEnvelopeSerializer(Serializer):
+    """Envelope for ``ChangePhoneView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = PhoneChangeResultSerializer()
+
+
+class PhoneChangeRequestResultSerializer(Serializer):
+    """Payload of a successful phone-change code request."""
+
+    new_phone = serializers.CharField()
+    expires_at = serializers.DateTimeField()
+
+
+class PhoneChangeRequestEnvelopeSerializer(Serializer):
+    """Envelope for ``RequestChangePhoneView`` (200 OK)."""
+
+    message = serializers.CharField()
+    code = serializers.CharField()
+    data = PhoneChangeRequestResultSerializer()

@@ -7,10 +7,13 @@ authentication.
 
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _t
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 
 from core.permissions.auth_based import IsAuthenticated
 from core.views import APIView, Response
+from djansin.kasejyan.serializers.error import ErrorEnvelopeSerializer
+from djansin.kasejyan.serializers.user_sessions import UserSessionsEnvelopeSerializer
 from djansin.kasejyan.services.user_sessions import ListUserSessionsService
 
 
@@ -19,6 +22,19 @@ class ListUserSessionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="List the current user's active sessions",
+        description=(
+            "Returns every outstanding refresh token issued to the "
+            "authenticated user that is still usable (neither revoked "
+            "nor expired), newest first."
+        ),
+        responses={
+            200: UserSessionsEnvelopeSerializer,
+            401: ErrorEnvelopeSerializer,
+        },
+        tags=["Kasejyan"],
+    )
     def get(self, request: HttpRequest, *args, **kwargs) -> Response:
         """Return the authenticated user's active sessions.
 
@@ -29,7 +45,11 @@ class ListUserSessionsView(APIView):
 
         Returns:
             An enveloped ``200 OK`` response containing the list of
-            active sessions.
+            active sessions, newest first.
+
+        Raises:
+            BusinessError: When the resolved user does not exist.
+                Raised by the service layer.
         """
         sessions = ListUserSessionsService()(identifier=request.user.username)
         return self.build_response(
