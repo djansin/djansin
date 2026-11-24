@@ -319,3 +319,18 @@ class PhoneChangeRequestResult(Result):
 
     def get_expires_at(self, value: datetime) -> str:
         return value.isoformat()
+
+
+@dataclass(frozen=True, slots=True)
+class AccountDeactivationResult(Result):
+    """Outcome of a successful account deactivation."""
+
+    username: str
+    deactivated_at: datetime
+    revoked_sessions: list[RevokedSessionResult]
+
+    def get_deactivated_at(self, value: datetime) -> str:
+        return value.isoformat()
+
+    def get_revoked_sessions(self, value: list[RevokedSessionResult]) -> list[dict]:
+        return [s.to_dict() for s in value]

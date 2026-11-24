@@ -8,6 +8,7 @@ from .phone_remove import RemovePhoneView, RequestRemovePhoneView
 from .refresh_token import RefreshTokenView
 from .revoke_session import RevokeSessionView
 from .signout import SignoutView
+from .user_deactivate import DeactivateAccountView
 from .user_sessions import ListUserSessionsView
 from .username_change import ChangeUsernameView
 from .verification_code import VerificationCodeView
@@ -29,6 +30,7 @@ __all__: list[str] = [
     "RefreshTokenView",
     "RevokeSessionView",
     "SignoutView",
+    "DeactivateAccountView",
     "ListUserSessionsView",
     "ChangeUsernameView",
     "VerificationCodeView",

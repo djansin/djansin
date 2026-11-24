@@ -22,6 +22,7 @@ from djansin.kasejyan.views import (
     ChangePasswordView,
     ChangePhoneView,
     ChangeUsernameView,
+    DeactivateAccountView,
     ListUserSessionsView,
     PasswordResetView,
     RefreshTokenView,
@@ -81,6 +82,8 @@ urlpatterns = [
         name="email-remove-request",
     ),
     path("me/email/remove/", RemoveEmailView.as_view(), name="email-remove"),
+    # --- Deactivate Account ---
+    path("me/deactivate/", DeactivateAccountView.as_view(), name="user-deactivate"),
     # --- Password reset (two-step, unauthenticated) ---
     path(
         "password/reset/request/",
