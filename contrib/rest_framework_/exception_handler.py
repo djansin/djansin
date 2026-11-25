@@ -68,7 +68,7 @@ def custom_exception_handler(exc: Any, context: Any) -> Response | None:
 
     # Permission Denied
     elif isinstance(exc, rest_exc.PermissionDenied):
-        error_instance = drf_error_code.DRF_PERMISSION_DENIED()
+        error_instance = drf_error_code.DRF_PERMISSION_DENIED(exc.detail)
 
     # Not Found (404)
     elif isinstance(exc, (rest_exc.NotFound, Http404)):
@@ -76,7 +76,7 @@ def custom_exception_handler(exc: Any, context: Any) -> Response | None:
 
     # Authentication Failed
     elif isinstance(exc, rest_exc.AuthenticationFailed):
-        detail = str(exc) if str(exc) else "Invalid authentication credentials."
+        detail = str(exc.detail) if str(exc) else "Invalid authentication credentials."
         error_instance = drf_error_code.DRF_AUTHENTICATION_FAILED(detail=detail)
 
     # Not Authenticated
