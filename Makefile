@@ -95,8 +95,8 @@ api-bash: api-up
 	docker compose -f ./compose.yml run --rm api sh -c "run-as $$(id -u) -- bash"
 
 ## Initialize the project using yarsin custom script
-## Usage: make init
-init:
+## Usage: make new-project
+new-project:
 	docker compose -f ./compose.yml run --rm --no-deps api sh -c "run-as $$(id -u) -- yarsin init"
 
 ## Create a new Django project
@@ -163,7 +163,7 @@ createpack: api-up
 createcore: api-up
 	docker compose -f ./compose.yml exec -T api bash -c "run-as $$(id -u) -- yarsin createapp --core $(filter-out $@,$(MAKECMDGOALS))"
 
-.PHONY: api-up api-bash init startproject runserver shell makemigrations migrate createsuperuser collectstatic pytest startapp createapp createpack createcore
+.PHONY: api-up api-bash new-project startproject runserver shell makemigrations migrate createsuperuser collectstatic pytest startapp createapp createpack createcore
 
 ######################################################
 #                 Documentation Operations           #
@@ -232,7 +232,7 @@ help:
 	@echo "  make dbms-restore      - Restore DBMS from backup"
 	@echo ""
 	@echo "DJANGO:"
-	@echo "  make init              - Initialize project"
+	@echo "  make new-project       - Initialize project"
 	@echo "  make startproject      - Create new Django project"
 	@echo "  make runserver         - Run Django development server"
 	@echo "  make shell             - Access Django shell"
