@@ -2,22 +2,22 @@
 
 # 🪵 جَنْسین
 
-«**جَنْسین**» [یه](https://vn.amoosin.com/wiki/یه) پروژه [شَمِلاء](https://vn.amoosin.com/wiki/شملاء) (شامل) یک سیستم [چَنْخَدِماءی](https://vn.amoosin.com/wiki/جندخدماءی) (چند سرویسی) برپایه Docker [ئَد](https://vn.amoosin.com/wiki/ئدن) (است) که برای [وُسِعْدن](https://vn.amoosin.com/wiki/وسعدن) (توسعه دادن) و [اِجْریدَن](https://vn.amoosin.com/wiki/اجریدن) (اجرا کردن) برنامه‌ها برپایه Django [طَرْحِشْدِه](https://vn.amoosin.com/wiki/طرحشدن) (طراحی شده است).
+«**جَنْسین**» [یه](https://www.fayzen.ir/wiki/یه) سیستم [چَنْخادْمایی](https://www.fayzen.ir/wiki/چنخدمایی) (چند سرویسی) برپایه Docker است که برای [واسْعانْدَن](https://www.fayzen.ir/wiki/واسعاندن) (توسعه دادن) و [ئاجْرانْدَن](https://www.fayzen.ir/wiki/ئاجراندن) (اجرا کردن) نرم‌افزارها برپایه Django [طَرْحانِشْدِه](https://www.fayzen.ir/wiki/طرحانشدن) (طراحی شده است).
 
 ---
 
-## 🚀 [کُلْبین](https://vn.amoosin.com/wiki/کلبین) (دید کلی)
+## 🚀 [کُلْبین](https://www.fayzen.ir/wiki/کلبین) (دید کلی)
 
-این پروژه از چهار [خَدِماء](https://vn.amoosin.com/wiki/خدماء) (سرویس) اصلی [شَکِلِشْدِه ئَد](https://vn.amoosin.com/wiki/شکلشدن) (تشکیل شده است):
+این پروژه از چهار [خدْمال](https://www.fayzen.ir/wiki/خدمال) (سرویس) اصلی [شَکْلانِشْدِه](https://www.fayzen.ir/wiki/شکلانشدن) (تشکیل شده است):
 
-1. web (Nginx): برای [هُدیدَن](https://vn.amoosin.com/wiki/هدیدن) [عُبورِشاء](https://vn.amoosin.com/wiki/عبورشاء) (ترافیک) HTTP به [خَدِماءْها](https://vn.amoosin.com/wiki/خدماء) (سرویس‌ها):
-2. api (Django): چارچوب جنگو که هسته اصلی برنامه [ئَد](https://vn.amoosin.com/wiki/ئدن) (است)؛
+1. web (Nginx): برای [هادْیانْدَن](https://www.fayzen.ir/wiki/هادیاندن) (هدایت کردن) [عُبورِش](https://www.fayzen.ir/wiki/عبورش) (ترافیک) HTTP به [خَدْمالْ‌ها](https://www.fayzen.ir/wiki/خدمال) (سرویس‌ها)؛
+2. api (Django): چارچوب جنگو که هسته اصلی سیستم است؛
 3. db (PostgreSQL): پایگاه‌داده اصلی پروژه؛
-4. pgadmin (pgAdmin4): ابزاری تحت وب برای [اِدارْدَن](https://vn.amoosin.com/wiki/اداردن) (مدیریت کردن) پایگاه‌داده اصلی.
+4. pgadmin (pgAdmin4): ابزاری تحت وب برای [أَدْرانْدَن](https://www.fayzen.ir/wiki/ادراندن) (مدیریت کردن) پایگاه‌داده اصلی.
 
 ![تهبین](./docs/assets/جنگو.png)
 
-و [یه](https://vn.amoosin.com/wiki/یه) دستیار به نام `yarsin` برای [تایِسْدَن](https://vn.amoosin.com/wiki/تایسدن) (سازماندهی کردن) دستورها و فایل‌های `bash`؛ بطوریکه برای [سازْدَن](https://vn.amoosin.com/wiki/سازدن) (ساختن) [ریزبرکاهای](https://vn.amoosin.com/wiki/ریزبرکا) (app) `core`، `user`، و `user_profile` [کایَد](https://vn.amoosin.com/wiki/کاید) (کافیه) دستور زیر را [باِجْری](https://vn.amoosin.com/wiki/اجریدن) (اجرا کنی):
+و [یه](https://www.fayzen.ir/wiki/یه) دستیار به نام `yarsin` برای [تایْسانْدَن](https://www.fayzen.ir/wiki/تایساندن) (سازماندهی کردن) دستورها و فایل‌های `bash`؛ بطوریکه برای [سازْیانْدَن](https://www.fayzen.ir/wiki/سازیاندن) (ساختن) [بِرْکاهای](https://www.fayzen.ir/wiki/برکا) (app) `core`، `user`، و `user_profile` [کایَد](https://www.fayzen.ir/wiki/کاید) (کافیه) [فَرْماء](https://www.fayzen.ir/wiki/فرماء) (دستور) زیر را [بِئاجْرانیم](https://www.fayzen.ir/wiki/اجریدن) (اجرا کنیم):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -29,7 +29,7 @@ source ./yarsin startapp core user user_profile
 
 ![یارسین](./docs/assets/یارسین.png)
 
-و برای [مانوزدن](https://vn.amoosin.com/wiki/مانوزدن) (بکاپ گرفتن از) پایگاه‌داده‌ها:
+و برای [مانِزْیانْدَن](https://www.fayzen.ir/wiki/مانزیاندن) (بکاپ گرفتن از) پایگاه‌داده‌ها:
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -41,7 +41,7 @@ source ./yarsin backup data
 
 ![مانوزدن](./docs/assets/مانوزدن.png)
 
-و برای [اِضافْدَن](https://vn.amoosin.com/wiki/اضافدن) [یه](https://vn.amoosin.com/wiki/یه) فایل script، [کایَد](https://vn.amoosin.com/wiki/کاید) آن را در <span dir="ltr" markdown="1">`./scripts/sources`</span> [بِمَحِلی](https://vn.amoosin.com/wiki/مَحِلْدَن) (قرار بدهی):
+و برای [أَضْفانْدَن](https://www.fayzen.ir/wiki/اضافدن) [یه](https://www.fayzen.ir/wiki/یه) فایل script، [کایَد](https://www.fayzen.ir/wiki/کاید) آن را در <span dir="ltr" markdown="1">`./scripts/sources`</span> [بِمَحلانیم](https://www.fayzen.ir/wiki/محلاندن) (قرار بدهیم):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -54,7 +54,7 @@ echo "This is a test bash script..."
 
 </div>
 
-سپس با <span dir="ltr" markdown="1">`source ./yarsin <script name>`</span> [بِاِجْری](https://vn.amoosin.com/wiki/اجریدن) [اَش](https://vn.amoosin.com/wiki/اش) (اجرایش کنی):
+سپس با <span dir="ltr" markdown="1">`source ./yarsin <script name>`</span> [بِأَجْرانیم](https://www.fayzen.ir/wiki/اجراندن) [اَش](https://www.fayzen.ir/wiki/اش) (اجرایش کنی):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -66,13 +66,13 @@ source ./yarsin test
 
 ---
 
-## 🏄‍♂️ [بَهِرِش](https://vn.amoosin.com/wiki/بهرش) (روش استفاده)
+## 🏄‍♂️ [بَهْرانِش](https://www.fayzen.ir/wiki/بهرانش) (روش استفاده)
 
-برای [بِهِرْدَن](https://vn.amoosin.com/wiki/بهردن) (استفاده کردن از) این پروژه [باید](https://vn.amoosin.com/wiki/باید) [داکر](https://docs.docker.com/desktop/) و [داکرکامپوز](https://docs.docker.com/compose/install/) در سیستم [اَت](https://vn.amoosin.com/wiki/ات) (تو) [نَصْبِشدِه بِئَنْد](https://vn.amoosin.com/wiki/نصبشتن) (نصب شده باشند). و [هایَد](https://vn.amoosin.com/wiki/هاید) (بهتره) [Makefile](https://makefiletutorial.com/) هم [بِدارائی](https://vn.amoosin.com/wiki/دارائدن) (داشته باشی) وگرنه باید دستورهای در `Makefile` را بشکل دستی [بِاِجْری](https://vn.amoosin.com/wiki/اجریدن) (اجرا کنی).
+برای [بَهْرانْدَن](https://www.fayzen.ir/wiki/بهراندن) (استفاده کردن از) این سیستم [باید](https://www.fayzen.ir/wiki/باید) [داکر](https://docs.docker.com/desktop/) و [داکرکامپوز](https://docs.docker.com/compose/install/) در سیستم [اَت](https://www.fayzen.ir/wiki/ات) (تو) [بِنَصْبانِشَنْد](https://www.fayzen.ir/wiki/نصبشتن) (نصب بشوند). و [هایَد](https://www.fayzen.ir/wiki/هاید) (بهتره) [Makefile](https://makefiletutorial.com/) هم [بِدارائی](https://www.fayzen.ir/wiki/دارائدن) (داشته باشی) وگرنه باید دستورهای در `Makefile` را بشکل دستی [بِاِجْری](https://www.fayzen.ir/wiki/اجریدن) (اجرا کنی).
 
-### ⛳️ [عَلَنْدَن](https://vn.amoosin.com/wiki/علندن) [نیازْماءْها](https://vn.amoosin.com/wiki/نیازماء)
+### ⛳️ [عَلْنانْدَن](https://www.fayzen.ir/wiki/علناندن) [نَیِزْماءْها](https://www.fayzen.ir/wiki/نیازماء)
 
-برای [عَلَنْدَن](https://vn.amoosin.com/wiki/علندن) [تَنیازْماءهای](https://vn.amoosin.com/wiki/نیازماء) (نیازمندی‌های) هر [اِجْرْلان](https://vn.amoosin.com/wiki/اجرلان) (محیط اجرا؛ Environment) [تایَد](https://vn.amoosin.com/wiki/تاید) (می‌توانی) فایل [مُنِسْناک](https://vn.amoosin.com/wiki/منسناک) (مناسب) را [بِبَهْری](https://vn.amoosin.com/wiki/بهردن) (استفاده کنی):
+برای [عَلْنانْدَن](https://www.fayzen.ir/wiki/علناندن) [نَیِزْماءْهای](https://www.fayzen.ir/wiki/نیازماء) (تعیین نیازهای) هر [أَجِرْلان](https://www.fayzen.ir/wiki/اجرلان) (محیط اجرا؛ Environment) [تایَد](https://www.fayzen.ir/wiki/تاید) (می‌توانی) فایل [مّنِسْناک](https://www.fayzen.ir/wiki/منسناک) (مناسب) را [بِبَهْرانی](https://www.fayzen.ir/wiki/بهراندن) (استفاده کنی):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -108,32 +108,22 @@ pytest-django==4.11.1                   # Pytest plugin that provides Django int
 
 </div>
 
-⚠️ برای [وارْدَن](https://vn.amoosin.com/wiki/واردن) (تبدیل کردن) [نَشِرْناسْ‌های](https://vn.amoosin.com/wiki/نشرناس) (شماره نسخه‌های) بسته‌های [عَلَنِشْدِه](https://vn.amoosin.com/wiki/علنشدن) (اعلان شده) در فایل‌های <span dir="ltr">`./requirements/*.txt`</span> به آخرین [نِشِرْماء](https://vn.amoosin.com/wiki/نشرماء) (نسخه؛ ورژن) پایدار، [تایَد](https://vn.amoosin.com/wiki/تاید) (می‌توانی) دستور زیر را [بِاِجْری](https://vn.amoosin.com/wiki/اجریدن) (اجرا کنی):
+### ⛳️ [آغْزانْدَن](https://www.fayzen.ir/wiki/آغزاندن) پروژه
 
-<div dir="ltr" align="left" markdown="1">
-
-```bash
-make update-requires # OR: python ./scripts/update_requirements.py
-```
-
-</div>
-
-### ⛳️ [آغازْدَن](https://vn.amoosin.com/wiki/آغازدن) پروژه
-
-[پَسَز](https://vn.amoosin.com/wiki/پسز) [عَلَنْدَن](https://vn.amoosin.com/wiki/علندن) (اعلان کردن) [نیازْماء‌های](https://vn.amoosin.com/wiki/نیازماء) پروژه [اَت](https://vn.amoosin.com/wiki/ات)، دستور زیر را [بِاِجْر](https://vn.amoosin.com/wiki/اجریدن) (اجرا کن) تا [یه](https://vn.amoosin.com/wiki/یه) پروژه جدید جنگو برایت [ایجِشَد](https://vn.amoosin.com/wiki/ایجشدن) (ایجاد شود):
+[پَسَز](https://www.fayzen.ir/wiki/پسز) [عَلْنانْدَن](https://www.fayzen.ir/wiki/علناندن) (اعلان کردن) [نَیِزْماء‌های](https://www.fayzen.ir/wiki/نیازماء) پروژه [اَت](https://www.fayzen.ir/wiki/ات)، دستور زیر را [بِئاجْران](https://www.fayzen.ir/wiki/ئاجراندن) (اجرا کن) تا [یه](https://www.fayzen.ir/wiki/یه) پروژه جدید جنگو برایت [أَیْجانِشَد](https://www.fayzen.ir/wiki/ایجشدن) (ایجاد شود):
 
 <div dir="ltr" align="left" markdown="1">
 
 ```bash
 # This is the same as running "django-admin startproject config ."
-make init # OR: source ./yarsin init
+make new-project # OR: source ./yarsin new-project
 ```
 
 </div>
 
-### ⛳️ [پِیْکَرْدَن](https://vn.amoosin.com/wiki/پیکریدن) جنگو
+### ⛳️ [پِیاکْرانْدَن](https://www.fayzen.ir/wiki/پیاکراندن) جنگو
 
-چون فایل [پِیْکَراء](https://vn.amoosin.com/wiki/پیکراء) (پیکربندی) <span dir="ltr" markdown="1">`./config/settings.py`</span> به <span dir="ltr" markdown="1">`./config/settings/base.py`</span> [نَقْلِشْدِه](https://vn.amoosin.com/wiki/نقلشدن) (منتقل شده)، [پِیْکَراف](https://vn.amoosin.com/wiki/پیکراف) (عالم پیکربندی) `BASE_DIR` را [بِصَلِح](https://vn.amoosin.com/wiki/صلحدن) (اصلاح کن):
+چون فایل [پِیاکْران](https://www.fayzen.ir/wiki/پیاکران) (پیکربندی) <span dir="ltr" markdown="1">`./config/settings.py`</span> به <span dir="ltr" markdown="1">`./config/settings/base.py`</span> [ناقْلانِشدِه](https://www.fayzen.ir/wiki/نقلشدن) (منتقل شده)، باید [پِیاکْراء](https://www.fayzen.ir/wiki/پیاکراء) (عالم پیکربندی) `BASE_DIR` را [بِصَلْحانی](https://www.fayzen.ir/wiki/صلحاندن) (اصلاح کن):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -148,7 +138,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 </div>
 
-و از [غَیِرْپَذیرهای](https://vn.amoosin.com/wiki/غیرپذیر) [مَحِلْناک](https://vn.amoosin.com/wiki/محلناک) (متغیرهای محلی) برای [عِیْنْدَن](https://vn.amoosin.com/wiki/عیندن) (اعلان کردن) `DEBUG` و `DEBUG` [بِبَهْر](https://vn.amoosin.com/wiki/بهردن) (استفاده کن):
+و از [غَیِرْپَذیرهای](https://www.fayzen.ir/wiki/غیرپذیر) [مَحِلْناک](https://www.fayzen.ir/wiki/محلناک) (متغیرهای محلی) برای [عَیْنانْدَن](https://www.fayzen.ir/wiki/عیناندن) (معین کردن) `DEBUG` و `DEBUG` [بِبَهْران](https://www.fayzen.ir/wiki/بهراندن) (استفاده کن):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -170,7 +160,7 @@ DEBUG = env.bool("DJANGO_DEBUG", False)
 
 </div>
 
-و <span dir="ltr" markdown="1">`ALLOWED_HOSTS = []`</span> را برای [حَفِظْدَن](https://vn.amoosin.com/wiki/حفظدن) [اَمَنیَّت](https://vn.amoosin.com/wiki/امنیت) از <span dir="ltr" markdown="1">`./config/settings/base.py`</span> به <span dir="ltr" markdown="1">`./config/settings/development.py`</span> [بِنَقِل](https://vn.amoosin.com/wiki/نقلدن):
+و <span dir="ltr" markdown="1">`ALLOWED_HOSTS = []`</span> را برای [حَفْظانْدَن](https://www.fayzen.ir/wiki/حفظاندن) [اَمَنیَّت](https://www.fayzen.ir/wiki/امنیت) از <span dir="ltr" markdown="1">`./config/settings/base.py`</span> به <span dir="ltr" markdown="1">`./config/settings/development.py`</span> [بِبَدْلان](https://www.fayzen.ir/wiki/نقلدن):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -189,9 +179,9 @@ CSRF_TRUSTED_ORIGINS = [
 
 </div>
 
-### ⛳️ [پِیْکَرْدَن](https://vn.amoosin.com/wiki/پیکریدن) پایگاه‌داده
+### ⛳️ [پِیاکْراندن](https://www.fayzen.ir/wiki/پیاکراندن) پایگاه‌داده
 
-برای [پِیْکَرْدَن](https://vn.amoosin.com/wiki/پیکردن) (پیکربندی) جنگو بِقَصْد [بَهِرْدَن](https://vn.amoosin.com/wiki/بهردن) (استفاده کردن از) پایگاه‌داده `PostgreSQL`، [پِیْکَراف](https://vn.amoosin.com/wiki/پیکراف) `DATABASES` را [بِصَلِح](https://vn.amoosin.com/wiki/صلحدن):
+برای [پِیاکْراندن](https://www.fayzen.ir/wiki/پیکردن) (پیکربندی) جنگو بِقَصْد [بَهِرْدَن](https://www.fayzen.ir/wiki/بهردن) (استفاده کردن از) پایگاه‌داده `PostgreSQL`، [پِیْکَراف](https://www.fayzen.ir/wiki/پیکراف) `DATABASES` را [بِصَلِح](https://www.fayzen.ir/wiki/صلحدن):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -205,9 +195,9 @@ DATABASES = {"default": env.db("DATABASE_URL")}
 
 </div>
 
-### ⛳️ [پِیْکَرْدَن](https://vn.amoosin.com/wiki/پیکریدن) فایل‌های ایستا
+### ⛳️ [پِیاکْراندن](https://www.fayzen.ir/wiki/پیاکراندن) فایل‌های ایستا
 
- برای [عَلَنْدَن](https://vn.amoosin.com/wiki/علندن) محل [جَمِلْدَن](https://vn.amoosin.com/wiki/جملدن) (گرآوری) فایل‌های ایستا، با [غَیْمَل](https://vn.amoosin.com/wiki/غیمل) (متغیر محلی) `STATIC_ROOT` پوشه [جَمِلاژ](https://vn.amoosin.com/wiki/جملاژ) (گردآوری) فایل‌های ایستا را [بِعَلِم](https://vn.amoosin.com/wiki/علمدن) (اعلام کن):
+ برای [عَلْنانْدَن](https://www.fayzen.ir/wiki/علندن) محل [جَمْلِشْدِگی](https://www.fayzen.ir/wiki/جملدن) (گرآوری) فایل‌های ایستا، باید با [غَیِرْمَل](https://www.fayzen.ir/wiki/غیمل) (متغیر محلی) `STATIC_ROOT` پوشه [جَمْلایِش](https://www.fayzen.ir/wiki/جملایش) (گردآوری) فایل‌های ایستا را [بِعالْمانی](https://www.fayzen.ir/wiki/علمدن) (اعلام کنی):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -231,17 +221,11 @@ STATICFILES_DIRS = [
 
 </div>
 
-سپس [مَحِلاف](https://vn.amoosin.com/wiki/محلاف) (مسیر) ریشه فایل‌های ایستا را در Nginx [بِعَلِم](https://vn.amoosin.com/wiki/علمدن) (اعلام کن):
+🪜 [پِیْکَراءْهای (پیکربندی‌های) اَهِمْناک (مهم) دیگر...](docs/after_installing.md)
 
-<div dir="ltr" align="left" markdown="1">
+### ⛳️ [ئاجْرانْدَن](https://www.fayzen.ir/wiki/ئاجراندن) پروژه
 
-</div>
-
-🪜 [پِیْکَراژ‌ْهای (پیکربندی‌های) اَهِمْناک (مهم) دیگر...](docs/after_installing.md)
-
-### ⛳️ [اِجْریدَن](https://vn.amoosin.com/wiki/اجریدن) پروژه
-
-درپایان، برای [اِجْریدَن](https://vn.amoosin.com/wiki/اجریدن) (به اجرا درآوردن) پروژه‌ات دستور زیر را [بِاِجْرْ](https://vn.amoosin.com/wiki/اجریدن) (اجرا کن):
+درپایان، برای [أَجْرانْدَن](https://www.fayzen.ir/wiki/ئاجراندن) (به اجرا درآوردن) پروژه‌ات دستور زیر را [بِئاجْران](https://www.fayzen.ir/wiki/ئاجراندن) (اجرا کن):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -257,16 +241,16 @@ docker logs djansin_api
 
 </div>
 
-پایان! 🎉 حالا ازطریق [وَنْداءْهای](https://vn.amoosin.com/wiki/ونداء) (لینک‌های) زیر [توانائی](https://vn.amoosin.com/wiki/توانائدن) (می‌توانی) به هر یک از [خَدِماءها](https://vn.amoosin.com/wiki/خدماء) [اَت](https://vn.amoosin.com/wiki/ات) (سرویس‌هایت) [بِدَسِسی](https://vn.amoosin.com/wiki/دسسدن) (دسترسی بیابی):
+پایان! 🎉 حالا ازطریق [وَنْداءْهای](https://www.fayzen.ir/wiki/ونداء) (لینک‌های) زیر [توانائی](https://www.fayzen.ir/wiki/توانائدن) (می‌توانی) به هر یک از [خَدْمال‌ها](https://www.fayzen.ir/wiki/خدمال) [اَت](https://www.fayzen.ir/wiki/ات) (سرویس‌هایت) [بَدَسْسانی](https://www.fayzen.ir/wiki/دسساندن) (دسترسی بیابی):
 
 - پروژه (صفحه جنگو): <span dir="ltr">[localhost:9000/](http://localhost:9000/)</span>
-- [اِدارال](https://vn.amoosin.com/wiki/ادارال) پایگاه‌داده (pgAdmin): <span dir="ltr">[pg.localhost:9000/](http://pg.localhost:9000/)</span> (user: `admin@email.com`, pass: `123456`)
+- [أَدْرال](https://www.fayzen.ir/wiki/ادارال) پایگاه‌داده (pgAdmin): <span dir="ltr">[pg.localhost:9000/](http://pg.localhost:9000/)</span> (user: `admin@email.com`, pass: `123456`)
 
 ---
 
 ## 🪄 یارْسین
 
-برای [اِجْریدَن](https://vn.amoosin.com/wiki/اجریدن) (اجرا کردن) دستورهای `django-admin` [تَوانائی](https://vn.amoosin.com/wiki/تونائدن) (می‌توانی) دستیار <span dir="ltr">`./yarsin`</span> را مانند زیر [بِبَهِری](https://vn.amoosin.com/wiki/بهردن) (به‌کار بگیری):
+برای [اِجْریدَن](https://www.fayzen.ir/wiki/اجریدن) (اجرا کردن) دستورهای `django-admin` [تَوانائی](https://www.fayzen.ir/wiki/تونائدن) (می‌توانی) دستیار <span dir="ltr">`./yarsin`</span> را مانند زیر [بِبَهِری](https://www.fayzen.ir/wiki/بهردن) (به‌کار بگیری):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -276,7 +260,7 @@ source ./yarsin [django-admin comments|cuatom camments] [options]
 
 </div>
 
-مثلا، برای [آغازْدَن](https://vn.amoosin.com/wiki/آغازدن) (آغاز کردن) چند [ریزبرکا](https://vn.amoosin.com/wiki/ریزبرکا) (برنامه کاربردی) [کایَد](https://vn.amoosin.com/wiki/کاید) (کافیه) مانند زیر [بِعَمَلی](https://vn.amoosin.com/wiki/عملیدن) (عمل کنی):
+مثلا، برای [آغازْدَن](https://www.fayzen.ir/wiki/آغازدن) (آغاز کردن) چند [ریزبرکا](https://www.fayzen.ir/wiki/ریزبرکا) (برنامه کاربردی) [کایَد](https://www.fayzen.ir/wiki/کاید) (کافیه) مانند زیر [بِعَمَلی](https://www.fayzen.ir/wiki/عملیدن) (عمل کنی):
 
 <div dir="ltr" align="left" markdown="1">
 
@@ -286,11 +270,11 @@ source ./yarsin startapp core user
 
 </div>
 
-⚠️ این درمورد همه دستورهای [عَبِرْناک](https://vn.amoosin.com/wiki/عبرناک) (معتبر) `django-admin` [قَرِرْمائَد](https://vn.amoosin.com/wiki/قررمائدن) (برقرار است)!
+⚠️ این درمورد همه دستورهای [عَبِرْناک](https://www.fayzen.ir/wiki/عبرناک) (معتبر) `django-admin` [قَرِرْمائَد](https://www.fayzen.ir/wiki/قررمائدن) (برقرار است)!
 
-### 🩺 دستورهای [نِگَهِش](https://vn.amoosin.com/wiki/نگهش) (نگهداری)
+### 🩺 دستورهای [نِگَهِش](https://www.fayzen.ir/wiki/نگهش) (نگهداری)
 
-- [مانوزْدَن](https://vn.amoosin.com/wiki/مانوزدن) [سَمْپاد](https://vn.amoosin.com/wiki/سمپاد) (بکاپگیری در سطح فایل):
+- [مانوزْدَن](https://www.fayzen.ir/wiki/مانوزدن) [سَمْپاد](https://www.fayzen.ir/wiki/سمپاد) (بکاپگیری در سطح فایل):
 
   <div dir="ltr" align="left" markdown="1">
 
@@ -300,7 +284,7 @@ source ./yarsin startapp core user
 
   </div>
 
-- [مانوزْدَن](https://vn.amoosin.com/wiki/مانوزدن) پایگاه‌داده (بکاپگیری در سطح پایگاه‌داده):
+- [مانوزْدَن](https://www.fayzen.ir/wiki/مانوزدن) پایگاه‌داده (بکاپگیری در سطح پایگاه‌داده):
 
   <div dir="ltr" align="left" markdown="1">
 
@@ -310,7 +294,7 @@ source ./yarsin startapp core user
 
   </div>
 
-- [پیشارْدَن](https://vn.amoosin.com/wiki/پیشاردن) (برگرداندن) [سمپاد](https://vn.amoosin.com/wiki/سمپاد):
+- [پیشارْدَن](https://www.fayzen.ir/wiki/پیشاردن) (برگرداندن) [سمپاد](https://www.fayzen.ir/wiki/سمپاد):
 
   <div dir="ltr" align="left" markdown="1">
 
@@ -320,7 +304,7 @@ source ./yarsin startapp core user
 
   </div>
 
-- [پیشارْدَن](https://vn.amoosin.com/wiki/پیشاردن) (برگرداندن) پایگاه‌داده:
+- [پیشارْدَن](https://www.fayzen.ir/wiki/پیشاردن) (برگرداندن) پایگاه‌داده:
 
   <div dir="ltr" align="left" markdown="1">
 
