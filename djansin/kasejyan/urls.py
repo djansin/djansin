@@ -40,7 +40,7 @@ from djansin.kasejyan.views import (
 
 
 # Namespace for URL reversing
-app_name = "auth"
+app_name = "kasejyan"
 
 urlpatterns = [
     # --- Sign-in / sign-up / verify / refresh / sign-out ---

@@ -21,7 +21,7 @@ def auth_api(api, user):
 class TestDeactivateAccountView:
     def test_deactivates_account(self, auth_api):
         api, user, _ = auth_api
-        url = reverse("auth:user-deactivate")
+        url = reverse("kasejyan:user-deactivate")
 
         resp = api.post(
             url,
@@ -40,7 +40,7 @@ class TestDeactivateAccountView:
 
     def test_rejects_wrong_password(self, auth_api):
         api, user, _ = auth_api
-        url = reverse("auth:user-deactivate")
+        url = reverse("kasejyan:user-deactivate")
 
         resp = api.post(url, {"current_password": "wrong"}, format="json")
 
@@ -52,20 +52,20 @@ class TestDeactivateAccountView:
 
     def test_rejects_missing_password(self, auth_api):
         api, _, _ = auth_api
-        url = reverse("auth:user-deactivate")
+        url = reverse("kasejyan:user-deactivate")
 
         resp = api.post(url, {}, format="json")
 
         assert resp.status_code == 422
 
     def test_rejects_unauthenticated(self, api):
-        url = reverse("auth:user-deactivate")
+        url = reverse("kasejyan:user-deactivate")
         resp = api.post(url, {"current_password": "secret123"}, format="json")
         assert resp.status_code == 401
 
     def test_reason_is_optional(self, auth_api):
         api, user, _ = auth_api
-        url = reverse("auth:user-deactivate")
+        url = reverse("kasejyan:user-deactivate")
 
         resp = api.post(url, {"current_password": "secret123"}, format="json")
 
@@ -75,7 +75,7 @@ class TestDeactivateAccountView:
 
     def test_revokes_sessions(self, auth_api):
         api, user, _ = auth_api
-        url = reverse("auth:user-deactivate")
+        url = reverse("kasejyan:user-deactivate")
 
         # Create extra sessions before deactivating
         for _ in range(2):

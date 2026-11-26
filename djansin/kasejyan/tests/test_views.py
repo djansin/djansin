@@ -18,7 +18,7 @@ def auth_api(api, user):
 
 class TestAuthenticateView:
     def test_login_with_password(self, api, user):
-        url = reverse("auth:sign-in-up")
+        url = reverse("kasejyan:sign-in-up")
         resp = api.post(
             url,
             {
@@ -33,7 +33,7 @@ class TestAuthenticateView:
         assert "access" in resp.json()["data"]
 
     def test_rejects_invalid_payload(self, api):
-        url = reverse("auth:sign-in-up")
+        url = reverse("kasejyan:sign-in-up")
         resp = api.post(url, {}, format="json")
         assert resp.status_code == 422
 
@@ -41,7 +41,7 @@ class TestAuthenticateView:
 class TestRefreshTokenView:
     def test_refreshes_token(self, api, user):
         refresh = str(RefreshToken.for_user(user))
-        url = reverse("auth:refresh")
+        url = reverse("kasejyan:refresh")
 
         resp = api.post(url, {"refresh_token": refresh}, format="json")
 
@@ -49,7 +49,7 @@ class TestRefreshTokenView:
         assert resp.json()["code"] == "AUTH_TOKEN_REFRESHED"
 
     def test_rejects_invalid_token(self, api):
-        url = reverse("auth:refresh")
+        url = reverse("kasejyan:refresh")
         resp = api.post(url, {"refresh_token": "invalid"}, format="json")
         assert resp.status_code == 422
 
@@ -57,7 +57,7 @@ class TestRefreshTokenView:
 class TestSignoutView:
     def test_signs_out_single_device(self, auth_api):
         api, user, token = auth_api
-        url = reverse("auth:signout")
+        url = reverse("kasejyan:signout")
         resp = api.post(
             url,
             {"all_devices": False, "refresh": str(token)},
@@ -68,7 +68,7 @@ class TestSignoutView:
 
     def test_signs_out_all_devices(self, auth_api):
         api, user, token = auth_api
-        url = reverse("auth:signout")
+        url = reverse("kasejyan:signout")
         resp = api.post(url, {"all_devices": True}, format="json")
         assert resp.status_code == 200
         assert resp.json()["code"] == "ALL_SESSIONS_REVOKED"
@@ -77,7 +77,7 @@ class TestSignoutView:
 class TestChangePasswordView:
     def test_changes_password(self, auth_api):
         api, user, token = auth_api
-        url = reverse("auth:password-change")
+        url = reverse("kasejyan:password-change")
         resp = api.post(
             url,
             {
@@ -95,7 +95,7 @@ class TestChangePasswordView:
 class TestListUserSessionsView:
     def test_lists_sessions(self, auth_api):
         api, user, _ = auth_api
-        url = reverse("auth:session-list")
+        url = reverse("kasejyan:session-list")
         resp = api.get(url)
         assert resp.status_code == 200
         assert isinstance(resp.json()["data"], list)
@@ -105,7 +105,7 @@ class TestRevokeSessionView:
     def test_revokes_own_session(self, auth_api):
         api, user, token = auth_api
         jti = token["jti"]
-        url = reverse("auth:session-revoke", kwargs={"jti": jti})
+        url = reverse("kasejyan:session-revoke", kwargs={"jti": jti})
         resp = api.delete(url)
         assert resp.status_code == 200
         assert resp.json()["code"] == "SESSION_REVOKED"
