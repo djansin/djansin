@@ -1,40 +1,22 @@
-"""URL Configuration for Aalnan App.
-
-This module defines URL patterns that map incoming web requests to the
-appropriate view functions or classes. It organizes all app-specific
-routes in one central location for maintainability.
-
-URL Pattern Components:
-    - Route: URL string pattern (can include converters)
-    - View: Function or class that handles the request
-    - Name: Unique identifier for reverse URL lookups
-    - Namespace: 'app_name' variable for URL namespacing
-
-Pattern Types:
-    - Static routes: path('about/', views.about)
-    - Dynamic routes: path('article/<int:pk>/', views.detail)
-    - Nested includes: path('api/', include(api_urls))
-
-Note:
-    - Always define app_name for URL namespacing
-    - Use path() for simple routes, re_path() for regex when needed
-    - Name all URLs for reverse() lookups in templates/views
-    - Group related patterns for readability
-"""
+"""URL configuration for the ``aalnan`` app."""
 
 from django.urls import path
-from rest_framework.routers import DefaultRouter
 
-from djansin.aalnan import views
+from djansin.aalnan.views import (
+    NotificationDeleteView,
+    NotificationListView,
+    NotificationPreferenceView,
+    NotificationReadAllView,
+    NotificationReadView,
+)
 
 
-# Namespace for URL reversing
 app_name = "aalnan"
 
-# Handles ViewSet routing automatically
-router = DefaultRouter()
-
-
-# router.register("resource-name", views.YourViewSet, basename="basename")  # Register ViewSets
-
-urlpatterns = router.urls
+urlpatterns = [
+    path("", NotificationListView.as_view(), name="list"),
+    path("<int:pk>/read/", NotificationReadView.as_view(), name="read"),
+    path("read-all/", NotificationReadAllView.as_view(), name="read-all"),
+    path("<int:pk>/", NotificationDeleteView.as_view(), name="delete"),
+    path("preferences/", NotificationPreferenceView.as_view(), name="preferences"),
+]

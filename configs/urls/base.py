@@ -22,4 +22,5 @@ from django.urls import include, path
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("auth/", include("djansin.kasejyan.urls")),
+    path("notfs/", include("djansin.aalnan.urls")),
 ]

@@ -1,21 +1,23 @@
-"""Admin Interface Configuration for Aalnan App.
-
-This module configures the Django admin interface for models in the 
-Aalnan application. It defines how models are displayed, 
-filtered, and edited in the admin dashboard.
-
-The admin configuration follows Django best practices:
-    - Uses @admin.register() decorator for clean registration
-    - Customizes list displays for optimal data overview
-    - Implements search and filter capabilities
-    - Maintains separation between admin UI and business logic
-
-Note:
-    - Uncomment model imports when models are defined
-    - Register each model with appropriate ModelAdmin class
-    - Keep admin customizations focused on presentation only
-"""
+"""Admin configuration for the ``aalnan`` app."""
 
 from django.contrib import admin
 
-from djansin.aalnan import models
+from djansin.aalnan.models import Notification, NotificationPreference
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "type", "title", "is_read", "created_at")
+    list_filter = ("type", "is_read", "created_at")
+    search_fields = ("user__username", "title", "body")
+    readonly_fields = ("id", "created_at", "updated_at")
+    ordering = ("-created_at",)
+    list_per_page = 50
+    list_select_related = ("user",)
+
+
+@admin.register(NotificationPreference)
+class NotificationPreferenceAdmin(admin.ModelAdmin):
+    list_display = ("user", "in_app_enabled", "email_enabled", "sms_enabled")
+    search_fields = ("user__username",)
+    list_select_related = ("user",)
