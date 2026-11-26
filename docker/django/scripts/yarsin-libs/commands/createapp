@@ -823,7 +823,7 @@ class ${capitalized_name}Config(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "${app_config_name}"
-    label = "${app_config_name}"
+    label = "${app_name}"
     verbose_name = "${capitalized_name} Application"
 
     def ready(self) -> None:
