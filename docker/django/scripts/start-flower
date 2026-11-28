@@ -64,8 +64,55 @@ set -o nounset  # Treat unset variables as errors
 : "${FLOWER_PASSWORD:=admin}"
 
 
-# -----------------------------------------------------------------------------
-# Main execution: Wait for workers, then start Flower.
+# =============================================================================
+# MAIN FUNCTION
+#
+# Main execution flow for the start-flower command.
+#
+# Description:
+#   Waits until at least one Celery worker responds to `celery inspect
+#   ping`, then launches Flower — a web-based monitoring and administration
+#   tool for Celery clusters. Flower is started in the foreground so the
+#   container's lifecycle is tied to it (a crash or exit stops the
+#   container, and Docker's restart policy can take over).
+#
+#   The wait loop exists because Flower can start before any worker is
+#   reachable — it would then show an empty dashboard with no workers and
+#   no task history. Waiting for a live worker guarantees the dashboard
+#   is useful from the first request.
+#
+# Arguments:
+#   $@ - Forwarded to `main` by the script entry point. Currently unused;
+#        kept for future flags (e.g. --port, --url-prefix).
+#
+# Options:
+#   None. All configuration is read from environment variables (see below).
+#
+# Environment Variables:
+#   PROJECT_NAME       Django project package (default: configs).
+#                      Must match the Celery app name used by the worker.
+#   CELERY_BROKER_URL  Redis broker URL (default: redis://redis:6379/0).
+#                      Must match the worker's CELERY_BROKER_URL, otherwise
+#                      Flower will connect to a different broker and show
+#                      no workers or tasks.
+#   FLOWER_USER        Basic-auth username for the Flower web UI
+#                      (default: admin). Change in production.
+#   FLOWER_PASSWORD    Basic-auth password for the Flower web UI
+#                      (default: admin). Change in production — use a
+#                      strong, randomly generated value.
+#
+# Returns:
+#   0 - Flower exited cleanly (e.g. SIGTERM from `docker stop`).
+#   1 - `celery` is not installed, or Flower failed to start.
+#
+# Notes:
+#   - The wait loop polls every second. The 15-second timeout in
+#     `_worker_ready` tolerates slow-starting workers without spinning.
+#   - `set -o errexit` would abort on the first failed ping, but the call
+#     is wrapped in `until`, which consumes the exit status — no guard
+#     is needed.
+#   - Flower is intentionally run in the foreground (no `&`, no `nohup`)
+#     so Docker's process supervision sees its exit status.
 # -----------------------------------------------------------------------------
 main() {
     # `until` runs while the condition is FALSE. To keep `set -e` from aborting
