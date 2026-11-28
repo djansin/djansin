@@ -191,6 +191,42 @@ doc-autogen:
 .PHONY: doc-build doc-serve doc doc-autogen
 
 ######################################################
+#              Celery & Flower Operations            #
+######################################################
+
+## Start only the Redis service
+## Usage: make redis-up
+redis-up:
+	docker compose -f ./compose.yml up -d redis
+
+## Start only the Celery worker
+## Usage: make celery-up
+celery-up:
+	docker compose -f ./compose.yml up -d celery_worker
+
+## Start only the Flower service
+## Usage: make flower-up
+flower-up:
+	docker compose -f ./compose.yml up -d flower
+
+## Start Celery worker and Flower together
+## Usage: make celery-flower-up
+celery-flower-up:
+	docker compose -f ./compose.yml up -d celery_worker flower
+
+## View Celery worker logs
+## Usage: make celery-logs
+celery-logs:
+	docker compose -f ./compose.yml logs -f celery_worker
+
+## View Flower logs
+## Usage: make flower-logs
+flower-logs:
+	docker compose -f ./compose.yml logs -f flower
+
+.PHONY: redis-up celery-up flower-up celery-flower-up celery-logs flower-logs
+
+######################################################
 #                 Utility Operations                 #
 ######################################################
 
@@ -263,6 +299,13 @@ help:
 	@echo "  make createapp app1 [app2 ...]  - Create multiple apps"
 	@echo "  make createpack app1 [app2 ...] - Create multiple package apps"
 	@echo "  make createcore app1 [app2 ...] - Create multiple core apps"
+	@echo "CELERY & FLOWER:"
+	@echo "  make redis-up          - Start Redis service"
+	@echo "  make celery-up         - Start Celery worker"
+	@echo "  make flower-up         - Start Flower monitoring"
+	@echo "  make celery-flower-up  - Start Celery worker and Flower"
+	@echo "  make celery-logs       - View Celery worker logs"
+	@echo "  make flower-logs       - View Flower logs"
 
 # Default target when just 'make' is called
 .DEFAULT_GOAL := help

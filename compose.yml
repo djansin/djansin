@@ -78,6 +78,86 @@ services:
       retries: 5
       start_period: 3s
 
+  # Celery Worker Service
+  # ---------------------
+  worker:
+    build:
+      context: .                                      # Project root as build context
+      dockerfile: ./docker/django/Dockerfile          # Path to Django Dockerfile
+      target: development-run-stage                   # Development runtime stage
+      args:
+        - PYTHON_TAG=${PYTHON_VERSION}-slim-bookworm  # Python base image
+        - BUILD_ENVIRONMENT=development               # Build-time environment flag
+        - WORK_DIRECTORY=/app                         # Working directory inside container
+        - PYPI_MIRROR=${PYPI_MIRROR}                  # PyPI mirror URL
+        - APT_MIRROR=${APT_MIRROR}                    # APT package mirror URL
+        - SKIP_SEC_EXPIRY=${SKIP_SEC_EXPIRY}          # Bypass APT validity checks
+    container_name: ${COMPOSE_PROJECT_NAME}_worker # Container identifier
+    environment:
+      - PROJECT_NAME=${PROJECT_NAME}                  # Django project configuration directory
+      - STATIC_ROOT=${STATIC_ROOT}                    # Absolute path for collected static files
+      - MEDIA_ROOT=${MEDIA_ROOT}                      # Absolute path for user uploads
+      - APP_DIRECTORY=${APP_DIRECTORY}                # Project-specific applications
+      - EXTRAS_DIRECTORY=${EXTRAS_DIRECTORY}          # Extra contributed apps
+      - PACK_DIRECTORY=${PACK_DIRECTORY}              # Reusable packages
+      - PYTHONUSERBASE=/packages                      # User-level Python package installation path
+      - USERNAME=${USERNAME}                          # Default container user
+    env_file:
+      - ./envs/.env.api                               # Django application environment variables
+    command: "start-worker" # Custom wrapper for celery worker server
+    depends_on:
+      redis:
+        condition: service_healthy                    # Wait for redis health check
+      db:
+        condition: service_healthy                    # Wait for database health check
+    volumes:
+      - .:/app:z                                      # Application source code with hot-reload
+      - ./docker/django/scripts/yarsin-libs/:/usr/local/bin/yarsin-libs/:ro  # Custom scripts (read-only)
+      - api_staticfiles:${STATIC_ROOT}                # Shared static files volume
+      - api_mediafiles:${MEDIA_ROOT}                  # Shared media files volume
+      - api_packages:/packages/                       # Persistent Python packages
+    networks:
+      - dsnet                                         # Project network
+
+  # Flower Service (Celery Monitoring)
+  # ----------------------------------
+  flower:
+    build:
+      context: .                                      # Project root as build context
+      dockerfile: ./docker/django/Dockerfile          # Path to Django Dockerfile
+      target: development-run-stage                   # Development runtime stage
+      args:
+        - PYTHON_TAG=${PYTHON_VERSION}-slim-bookworm  # Python base image
+        - BUILD_ENVIRONMENT=development               # Build-time environment flag
+        - WORK_DIRECTORY=/app                         # Working directory inside container
+        - PYPI_MIRROR=${PYPI_MIRROR}                  # PyPI mirror URL
+        - APT_MIRROR=${APT_MIRROR}                    # APT package mirror URL
+        - SKIP_SEC_EXPIRY=${SKIP_SEC_EXPIRY}          # Bypass APT validity checks
+    container_name: ${COMPOSE_PROJECT_NAME}_flower    # Container identifier
+    environment:
+      - PROJECT_NAME=${PROJECT_NAME}                  # Django project configuration directory
+      - STATIC_ROOT=${STATIC_ROOT}                    # Absolute path for collected static files
+      - MEDIA_ROOT=${MEDIA_ROOT}                      # Absolute path for user uploads
+      - APP_DIRECTORY=${APP_DIRECTORY}                # Project-specific applications
+      - EXTRAS_DIRECTORY=${EXTRAS_DIRECTORY}          # Extra contributed apps
+      - PACK_DIRECTORY=${PACK_DIRECTORY}              # Reusable packages
+      - PYTHONUSERBASE=/packages                      # User-level Python package installation path
+      - USERNAME=${USERNAME}                          # Default container user
+    env_file:
+      - ./envs/.env.api                               # Django application environment variables
+      - ./envs/.env.flower                            # flower environment variables
+    command: "start-flower" # Custom wrapper for flower server
+    depends_on:
+      redis:
+        condition: service_healthy                    # Wait for redis health check
+      worker:
+        condition: service_started                    # Wait for database to start
+    volumes:
+      - .:/app:z                                      # Application source code with hot-reload
+      - api_packages:/packages/                       # Persistent Python packages
+    networks:
+      - dsnet                                         # Project network
+
   # pgAdmin Database Management Service
   # -----------------------------------
   # Web-based PostgreSQL administration interface.
@@ -128,6 +208,23 @@ services:
       retries: 5
       start_period: 30s
 
+  # Redis Service (Celery Broker & Result Backend)
+  # ----------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}_redis
+    restart: unless-stopped
+    networks:
+      - dsnet
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
 # Network Configuration
 # ---------------------
 networks:
@@ -148,3 +245,5 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME}_packages
   pgadmin_data:                                       # pgAdmin configuration and data
     name: ${COMPOSE_PROJECT_NAME}_pgadmin_data
+  redis_data:                                         # redis configuration and data
+    name: ${COMPOSE_PROJECT_NAME}_redis_data

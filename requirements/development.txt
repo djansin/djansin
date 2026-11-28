@@ -20,6 +20,9 @@ django-extensions~=4.1                  # Enhanced Django toolkit with shell_plu
 django-debug-toolbar~=6.1               # Interactive debug toolbar for real-time SQL queries, templates, and request inspection.
 django-silk~=5.3                        # Profiling and inspection tool for Django REST Framework and HTTP requests execution time.
 
+## Celery Development Support
+watchdog~=7.1                           # File-system monitoring library providing the `watchmedo` CLI, used by `start_worker` for auto-reload.
+
 ## Documentation System
 Sphinx~=9.0                             # Main documentation generator for Python projects.
 sphinx-book-theme~=1.1                  # Clean, book-style theme for tutorials and technical docs.

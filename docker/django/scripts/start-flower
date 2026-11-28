@@ -1,68 +1,110 @@
 #!/usr/bin/env bash
 
-# -----------------------------------------------------------------------------
-# Script: start-flower
-# Description: Waits for Celery workers to become available, then starts Celery Flower
-#              Flower is a web-based monitoring tool for Celery clusters
-# Usage: ./start-flower
-# Environment Variables Required:
-#   CELERY_BROKER_URL - Broker URL (e.g., redis://redis:6379/0)
-#   CELERY_FLOWER_USER - Username for Flower HTTP basic authentication
-#   CELERY_FLOWER_PASSWORD - Password for Flower HTTP basic authentication
-# Dependencies: Requires sourced files: _constants.sh, _messages.sh, _utils.sh
-#               Assumes Celery app is configured in config module
-# -----------------------------------------------------------------------------
-
-# Enable strict error handling for more robust scripts
-set -o errexit  # Exit script immediately if any command exits with non-zero status
-set -o nounset  # Exit script if any variable is referenced before being set
-
-# Define the project and workdir directory
-workdir="$(cd "$(dirname "$0")" && pwd)"  # Get script's directory by changing to it then printing path
-project_dir=$(realpath "$workdir")         # Get canonical absolute path (resolves symlinks)
-
-# Source necessary library files for shared functionality
-source "${workdir}/sources/_constants.sh"  # Contains constant values and configuration
-source "${workdir}/sources/_messages.sh"   # Contains formatted output functions (message_bold, message_success, etc.)
-source "${workdir}/sources/_utils.sh"      # Contains utility helper functions
+# =============================================================================
+# Command: start-flower
+# Description: Waits for Celery workers to become available, then starts
+#              Celery Flower — a web-based monitoring tool for Celery clusters.
+#
+# Author: Mohammad Ali Amini
+# Date: 2026
+# =============================================================================
 
 # -----------------------------------------------------------------------------
-# Function: worker_ready
-# Description: Checks if Celery workers are responsive by sending a ping command
-#              Uses celery inspect ping which queries workers and returns response
-# Returns: 0 (success) if workers respond, non-zero if workers are unavailable
-# Note: The -A flag specifies the Celery application module (config)
+# Path Resolution
 # -----------------------------------------------------------------------------
-worker_ready() {
-    # Ping all Celery workers in the cluster
-    # -A config: Use Celery app defined in config module
-    # inspect ping: Sends ping to workers, returns success if at least one responds
-    celery -A config inspect ping
+# Determines script directory and canonical project paths for consistent
+# file location regardless of how the script is invoked.
+# -----------------------------------------------------------------------------
+WORKDIR=$(cd "$(dirname "$0")" && pwd)              # Script's directory
+PROJECT_PATH=$(realpath "$WORKDIR")                 # Resolve symlinks to absolute path
+YARSIN_LIB_PATH="${PROJECT_PATH}/yarsin-libs"
+
+YARSIN_CORE_PATH="${YARSIN_LIB_PATH}/core"
+
+# -----------------------------------------------------------------------------
+# Core Library Loading
+# -----------------------------------------------------------------------------
+# Loads shared functionality libraries that provide common utilities,
+# formatted output, and constants used throughout the dispatcher.
+# -----------------------------------------------------------------------------
+source "${YARSIN_CORE_PATH}/constants.sh"                  # Constants and configuration
+source "${YARSIN_CORE_PATH}/alenaal.sh"                    # Formatted output functions
+source "${YARSIN_CORE_PATH}/utils.sh"                      # Utility helpers
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Strict Mode Configuration
+# -----------------------------------------------------------------------------
+# Enforces strict error handling to prevent silent failures and ensure
+# predictable script behavior.
+# -----------------------------------------------------------------------------
+set -o errexit  # Exit immediately if any command fails
+set -o pipefail # Propagate errors in pipelines
+set -o nounset  # Treat unset variables as errors
+
+# -----------------------------------------------------------------------------
+# Environment Variable Defaults
+# -----------------------------------------------------------------------------
+# Uses `: "${VAR:=default}"` to assign a default value only when the
+# variable is unset or empty. This keeps `set -o nounset` from aborting
+# when the caller did not export the variable explicitly.
+#
+# PROJECT_NAME:       Django project package (matches the Celery app name).
+# CELERY_BROKER_URL:  Redis broker URL; must match the worker's setting.
+# FLOWER_USER:        Basic-auth username for the Flower web UI.
+# FLOWER_PASSWORD:    Basic-auth password for the Flower web UI.
+# -----------------------------------------------------------------------------
+: "${PROJECT_NAME:=configs}"
+: "${CELERY_BROKER_URL:=redis://redis:6379/0}"
+: "${FLOWER_USER:=admin}"
+: "${FLOWER_PASSWORD:=admin}"
+
+
+# -----------------------------------------------------------------------------
+# Main execution: Wait for workers, then start Flower.
+# -----------------------------------------------------------------------------
+main() {
+    # `until` runs while the condition is FALSE. To keep `set -e` from aborting
+    # on the first failed ping, the call is guarded with `if ! ...`.
+    until _worker_ready; do
+        alenaal_info "Waiting for Celery workers to become available..."
+        sleep 1
+    done
+
+    alenaal_success "Celery workers are now available and ready to process tasks."
+
+    # Start Flower in the foreground. The broker URL is read from settings by
+    # default; we pass it explicitly so the worker and Flower always agree.
+    celery -A "${PROJECT_NAME}" flower \
+        --port=5555 \
+        --broker="${CELERY_BROKER_URL}" \
+        --basic_auth="${FLOWER_USER}:${FLOWER_PASSWORD}"
 }
 
+
 # -----------------------------------------------------------------------------
-# Main execution: Wait for workers, then start Flower
+# Function: _worker_ready
+# Description: Returns 0 if at least one Celery worker responds to `ping`,
+#              non-zero otherwise. Uses a 15-second timeout so slow-starting
+#              workers are not mistaken for absent ones.
+#
+# Note: `celery inspect ping` exits non-zero when no worker is reachable,
+# which is the expected "not ready yet" signal. Under `set -e`, a failing
+# command inside a function called by `until` does NOT abort the script —
+# `until` consumes the exit status. The `|| true` is therefore unnecessary
+# here, but kept as a defensive habit in case this helper is ever called
+# outside an `until` loop.
 # -----------------------------------------------------------------------------
+_worker_ready() {
+    celery -A "${PROJECT_NAME}" inspect ping --timeout=15 >/dev/null 2>&1
+}
 
-# Keep checking until celery workers are ready using until loop
-# until loop runs WHILE the condition is FALSE (opposite of while)
-until worker_ready; do
-    # Display waiting message with bold formatting
-    message_bold "Waiting for Celery workers to become available..."
 
-    # Wait 1 second before retrying to avoid tight loop
-    sleep 1
-done
-
-# Display success message once workers are available
-message_success "Celery workers are now available and ready to process tasks."
-
-# Start Celery Flower monitoring dashboard with authentication
-# -A config: Use Celery app defined in config module
-# flower: Start Flower web interface
-# --broker="${CELERY_BROKER_URL}": Specify message broker URL (from environment)
-# --basic_auth="${CELERY_FLOWER_USER}:${CELERY_FLOWER_PASSWORD}": Enable HTTP basic auth
-# Note: Flower will run in foreground, blocking until terminated
-celery -A config flower \
-    --broker="${CELERY_BROKER_URL}" \
-    --basic_auth="${CELERY_FLOWER_USER}:${CELERY_FLOWER_PASSWORD}"
+# =============================================================================
+# SCRIPT ENTRY POINT
+# =============================================================================
+main "$@"

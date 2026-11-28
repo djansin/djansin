@@ -19,3 +19,8 @@ django-phonenumber-field>=8.5,<9.0      # Phone number field for Django models w
 
 # Date & Time (Internationalization/Localization)
 jdatetime>=5.3,<6.0                     # Jalali (Persian) calendar implementation for Python.
+
+# Async Task Processing
+celery[redis]>=5.7,<6.0                 # Distributed task queue for asynchronous processing.
+redis>=8.2,<9.0                         # In-memory data store used as Celery broker and result backend.
+flower>=2.2,<3.0                        # Web-based monitoring and administration tool for Celery.
